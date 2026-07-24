@@ -63,6 +63,15 @@ class WarrantyDetailViewModel @Inject constructor(
         }
     }
 
+    fun signWarranty(signatureBase64: String) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(actionInProgress = true)
+            repository.sign(warrantyId, signatureBase64)
+                .onSuccess { load(); _uiState.value = _uiState.value.copy(actionInProgress = false, snackbarMessage = "Garantía firmada correctamente.") }
+                .onFailure { _uiState.value = _uiState.value.copy(actionInProgress = false, snackbarMessage = it.toUserMessage()) }
+        }
+    }
+
     fun delete() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(actionInProgress = true)

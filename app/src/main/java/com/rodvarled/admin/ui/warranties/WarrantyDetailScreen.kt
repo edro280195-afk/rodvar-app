@@ -19,6 +19,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -28,7 +30,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -38,6 +42,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -52,7 +57,9 @@ import com.rodvarled.admin.ui.components.DetailRow
 import com.rodvarled.admin.ui.components.ErrorState
 import com.rodvarled.admin.ui.components.FullScreenLoading
 import com.rodvarled.admin.ui.components.SectionHeader
+import com.rodvarled.admin.ui.components.SignaturePad
 import com.rodvarled.admin.ui.components.StatusBadge
+import com.rodvarled.admin.ui.components.rememberSignaturePadState
 import com.rodvarled.admin.ui.theme.warrantyStatusStyle
 import kotlinx.coroutines.launch
 
@@ -71,6 +78,8 @@ fun WarrantyDetailScreen(
     var showRevokeConfirm by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showResetConfirm by remember { mutableStateOf(false) }
+    val signatureState = rememberSignaturePadState()
+    var acceptedTerms by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.snackbarMessage) {
         uiState.snackbarMessage?.let { scope.launch { snackbarHostState.showSnackbar(it) }; viewModel.consumeSnackbar() }
@@ -139,6 +148,37 @@ fun WarrantyDetailScreen(
                                 style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier.padding(vertical = 2.dp)
                             )
+                        }
+                    }
+
+                    if (warranty.isActive && !warranty.isSigned) {
+                        SectionHeader("Firma del cliente")
+                        Surface(
+                            tonalElevation = 3.dp,
+                            shadowElevation = 2.dp,
+                            shape = MaterialTheme.shapes.medium,
+                            color = MaterialTheme.colorScheme.surface,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                        ) {
+                            SignaturePad(state = signatureState, modifier = Modifier.fillMaxWidth().height(220.dp).padding(8.dp))
+                        }
+                        Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                            TextButton(onClick = { signatureState.clear() }) { Text("Limpiar firma") }
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = acceptedTerms, onCheckedChange = { acceptedTerms = it })
+                            Text("El cliente acepta los términos de garantía de Rodvar LED.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                        }
+                        Button(
+                            onClick = {
+                                val sig = signatureState.exportPngBase64()
+                                if (sig != null && acceptedTerms) viewModel.signWarranty(sig)
+                            },
+                            enabled = !uiState.actionInProgress && signatureState.hasSignature && acceptedTerms,
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                        ) {
+                            if (uiState.actionInProgress) CircularProgressIndicator(modifier = Modifier.height(20.dp), strokeWidth = 2.dp)
+                            else Text("Firmar garantía")
                         }
                     }
 
