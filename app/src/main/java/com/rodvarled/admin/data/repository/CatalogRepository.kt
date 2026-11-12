@@ -70,7 +70,19 @@ class CatalogRepository @Inject constructor(
         purchaseDate: String? = null,
         receivedDate: String? = null
     ) = safeApiCall {
-        val result = api.adjustStock(productId, StockAdjustRequest(bulbTypeId, delta, reason, note, unitCostUsd, exchangeRate, purchaseDate, receivedDate))
+        val result = api.adjustStock(
+            productId,
+            StockAdjustRequest(
+                bulbTypeId = bulbTypeId,
+                delta = delta,
+                reason = reason,
+                note = note,
+                unitCostUsd = unitCostUsd,
+                exchangeRate = exchangeRate,
+                purchaseDate = purchaseDate,
+                receivedDate = receivedDate
+            )
+        )
         refresh()
         result
     }

@@ -63,6 +63,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
+import com.rodvarled.admin.ui.navigation.Screen
 import com.rodvarled.admin.core.util.PhoneUtils
 import com.rodvarled.admin.ui.appointments.formatAppointmentDate
 import com.rodvarled.admin.ui.components.CancelledBanner
@@ -291,6 +292,14 @@ fun WarrantyDetailScreen(
                                 Text("Registrar garantía aplicada")
                             }
                         }
+                    }
+
+                    OutlinedButton(
+                        onClick = { navController.navigate(Screen.InstallationMedia.of(warranty.installationId)) },
+                        shape = MaterialTheme.shapes.large,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Fotos y videos del trabajo")
                     }
 
                     // Acciones de Compartir por WhatsApp

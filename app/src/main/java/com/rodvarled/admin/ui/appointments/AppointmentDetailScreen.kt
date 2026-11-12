@@ -73,6 +73,7 @@ import com.rodvarled.admin.ui.components.ConfirmDialog
 import com.rodvarled.admin.ui.components.ErrorState
 import com.rodvarled.admin.ui.components.FullScreenLoading
 import com.rodvarled.admin.ui.components.InitialsAvatar
+import com.rodvarled.admin.ui.components.formatMoney
 import com.rodvarled.admin.ui.navigation.Screen
 import com.rodvarled.admin.core.util.openGoogleMapsNavigation
 import com.rodvarled.admin.core.util.PhoneUtils
@@ -265,6 +266,12 @@ fun AppointmentDetailScreen(
                             formatAppointmentTime(appointment.requestedTime)?.let { InfoLine("Hora", it) }
                             InfoLine("Vehículo", appointment.vehicleInfo)
                             InfoLine("Origen", appointment.source)
+                            if (appointment.isRevision) {
+                                InfoLine(
+                                    "Servicio",
+                                    "Revisión a domicilio" + (appointment.visitFeeAmount?.let { " · ${formatMoney(it)}" } ?: "")
+                                )
+                            }
                             appointment.quoteTotal?.let { InfoLine("Total Cotizado", "$${"%.2f".format(it)} MXN") }
                             if (!appointment.notes.isNullOrBlank()) InfoLine("Notas u Observaciones", appointment.notes)
                             if (appointment.itinerarySentAt != null) InfoLine("Itinerario", "Enviado por WhatsApp ✓")
@@ -309,6 +316,16 @@ fun AppointmentDetailScreen(
                         }
                     }
 
+                    if (appointment.installationId != null) {
+                        OutlinedButton(
+                            onClick = { navController.navigate(Screen.InstallationMedia.of(appointment.installationId)) },
+                            shape = MaterialTheme.shapes.large,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Fotos y videos del trabajo")
+                        }
+                    }
+
                     when (appointment.status) {
                         "Pendiente" -> {
                             Button(
@@ -338,7 +355,10 @@ fun AppointmentDetailScreen(
                                 shape = MaterialTheme.shapes.large,
                                 modifier = Modifier.fillMaxWidth().height(50.dp)
                             ) {
-                                Text("Completar Instalación y Crear Garantía", fontWeight = FontWeight.Bold)
+                                Text(
+                                    if (appointment.isRevision) "Completar y Cobrar Revisión" else "Completar Instalación y Crear Garantía",
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                             OutlinedButton(
                                 onClick = { showCancelDialog = true },

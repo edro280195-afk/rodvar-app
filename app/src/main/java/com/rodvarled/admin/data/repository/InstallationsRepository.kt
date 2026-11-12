@@ -16,6 +16,8 @@ class InstallationsRepository @Inject constructor(
     suspend fun getInstallation(id: Int) = safeApiCall { api.getInstallation(id) }
     suspend fun createDirectInstallation(request: CreateDirectInstallationRequest) = safeApiCall { api.createDirectInstallation(request) }
     suspend fun updateInstallation(id: Int, request: UpdateInstallationRequest) = safeApiCall { api.updateInstallation(id, request) }
+    suspend fun getMedia(id: Int) = safeApiCall { api.getMedia(id) }
+    suspend fun deleteMedia(id: Int, mediaId: Int) = safeApiCall { api.deleteMedia(id, mediaId) }
     suspend fun addPhoto(id: Int, title: String?, beforeBase64: String?, afterBase64: String) = safeApiCall {
         api.addPhoto(id, CreateInstallationPhotoRequest(title, beforeBase64, afterBase64))
     }

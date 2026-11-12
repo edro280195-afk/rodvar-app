@@ -4,10 +4,12 @@ import com.rodvarled.admin.data.remote.dto.CreateDirectInstallationRequest
 import com.rodvarled.admin.data.remote.dto.CreateInstallationPhotoRequest
 import com.rodvarled.admin.data.remote.dto.DirectInstallationResponse
 import com.rodvarled.admin.data.remote.dto.InstallationDetail
+import com.rodvarled.admin.data.remote.dto.InstallationMedia
 import com.rodvarled.admin.data.remote.dto.InstallationPhoto
 import com.rodvarled.admin.data.remote.dto.InstallationSummary
 import com.rodvarled.admin.data.remote.dto.UpdateInstallationRequest
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.PATCH
 import retrofit2.http.POST
@@ -25,6 +27,12 @@ interface InstallationsApi {
 
     @PATCH("api/Installations/{id}")
     suspend fun updateInstallation(@Path("id") id: Int, @Body request: UpdateInstallationRequest)
+
+    @GET("api/Installations/{id}/media")
+    suspend fun getMedia(@Path("id") id: Int): List<InstallationMedia>
+
+    @DELETE("api/Installations/{id}/media/{mediaId}")
+    suspend fun deleteMedia(@Path("id") id: Int, @Path("mediaId") mediaId: Int)
 
     @GET("api/Installations/{id}/photos")
     suspend fun getPhotos(@Path("id") id: Int): List<InstallationPhoto>

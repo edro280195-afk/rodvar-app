@@ -4,6 +4,7 @@ import com.rodvarled.admin.data.remote.dto.AdjustPointsRequest
 import com.rodvarled.admin.data.remote.dto.CreateCustomerRequest
 import com.rodvarled.admin.data.remote.dto.CustomerDetail
 import com.rodvarled.admin.data.remote.dto.CustomerListItem
+import com.rodvarled.admin.data.remote.dto.CustomerLookup
 import com.rodvarled.admin.data.remote.dto.MessageResponse
 import com.rodvarled.admin.data.remote.dto.PortalLink
 import com.rodvarled.admin.data.remote.dto.UpdateCustomerRequest
@@ -18,6 +19,9 @@ import retrofit2.http.Query
 interface CustomersApi {
     @GET("api/Customers")
     suspend fun getCustomers(@Query("search") search: String? = null): List<CustomerListItem>
+
+    @GET("api/Customers/lookup")
+    suspend fun lookup(@Query("q") query: String): List<CustomerLookup>
 
     @GET("api/Customers/{id}")
     suspend fun getCustomer(@Path("id") id: Int): CustomerDetail

@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -61,10 +62,17 @@ import androidx.navigation.NavHostController
 import com.rodvarled.admin.core.util.PhoneUtils
 import com.rodvarled.admin.data.remote.dto.DirectInstallationResponse
 import com.rodvarled.admin.ui.appointments.PAYMENT_METHODS
+import com.rodvarled.admin.data.remote.dto.SERVICE_TYPE_INSTALLATION
+import com.rodvarled.admin.data.remote.dto.SERVICE_TYPE_REVISION
+import com.rodvarled.admin.ui.components.ChargeLinesEditor
+import com.rodvarled.admin.ui.components.ChargeSummaryCard
 import com.rodvarled.admin.ui.components.DropdownSelector
+import com.rodvarled.admin.ui.components.ProductPickerSheet
+import com.rodvarled.admin.ui.components.VehicleSearchField
+import com.rodvarled.admin.ui.components.formatMoney
 import com.rodvarled.admin.ui.components.IconBadge
 import com.rodvarled.admin.ui.components.PhoneInputField
-import com.rodvarled.admin.ui.components.PhotoCaptureField
+import com.rodvarled.admin.ui.media.MediaPickerSection
 import com.rodvarled.admin.ui.components.RodvarListRow
 import com.rodvarled.admin.ui.components.SectionHeader
 import com.rodvarled.admin.ui.navigation.Screen
@@ -76,7 +84,7 @@ fun DirectInstallationScreen(
     viewModel: DirectInstallationViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    var showVehicleSheet by remember { mutableStateOf(false) }
+    val vehicleSearch by viewModel.vehicleSearcher.state.collectAsState()
     var showProductSheet by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val scannedCodeState = navController.currentBackStackEntry
@@ -95,7 +103,7 @@ fun DirectInstallationScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Instalación directa") },
+                title = { Text(if (uiState.isRevision) "Revisión a domicilio" else "Instalación directa") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Atrás")
@@ -114,7 +122,7 @@ fun DirectInstallationScreen(
                             if (uiState.isSaving) {
                                 CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                             } else {
-                                Text("Registrar instalación")
+                                Text(if (uiState.isRevision) "Registrar revisión" else "Registrar instalación")
                             }
                         }
                     }
@@ -128,13 +136,19 @@ fun DirectInstallationScreen(
                 completed = completed,
                 customerName = uiState.customerName,
                 customerPhone = uiState.customerPhone,
-                onSignWarranty = {
-                    navController.navigate(Screen.WarrantyDetail.of(completed.warrantyId)) {
-                        popUpTo(Screen.Dashboard.route)
+                onSignWarranty = completed.warrantyId?.let { warrantyId ->
+                    {
+                        navController.navigate(Screen.WarrantyDetail.of(warrantyId)) {
+                            popUpTo(Screen.Dashboard.route)
+                        }
                     }
                 },
                 onSharePortal = {
-                    val message = "¡Hola ${uiState.customerName.trim()}! Tu instalación ${completed.folio} quedó registrada. En tu portal de Rodvar LED puedes consultar y firmar tu garantía, ver tus puntos y tu historial: ${completed.portalUrl}"
+                    val message = if (completed.warrantyId != null) {
+                        "¡Hola ${uiState.customerName.trim()}! Tu instalación ${completed.folio} quedó registrada. En tu portal de Rodvar LED puedes consultar y firmar tu garantía, ver tus puntos y tu historial: ${completed.portalUrl}"
+                    } else {
+                        "¡Hola ${uiState.customerName.trim()}! Tu revisión ${completed.folio} quedó registrada. En tu portal de Rodvar LED puedes ver tus puntos y tu historial: ${completed.portalUrl}"
+                    }
                     val url = PhoneUtils.buildWhatsAppUrl(uiState.customerPhone, message)
                     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
                 },
@@ -150,27 +164,27 @@ fun DirectInstallationScreen(
                     .padding(horizontal = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                SectionHeader("Cliente", modifier = Modifier.padding(top = 8.dp))
+                SectionHeader("Tipo de trabajo", modifier = Modifier.padding(top = 8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    FilterChip(
+                        selected = !uiState.isRevision,
+                        onClick = { viewModel.onServiceTypeChange(SERVICE_TYPE_INSTALLATION) },
+                        label = { Text("Instalación") }
+                    )
+                    FilterChip(
+                        selected = uiState.isRevision,
+                        onClick = { viewModel.onServiceTypeChange(SERVICE_TYPE_REVISION) },
+                        label = { Text("Solo revisión · ${formatMoney(uiState.homeVisitFee)}") }
+                    )
+                }
+
+                SectionHeader("Cliente")
                 PhoneInputField(
                     phone = uiState.customerPhone,
                     onPhoneChange = viewModel::onCustomerPhoneChange,
                     label = "Teléfono",
                     modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
                 )
-
-                if (uiState.customerSuggestions.isNotEmpty()) {
-                    Column(modifier = Modifier.padding(top = 4.dp)) {
-                        uiState.customerSuggestions.take(4).forEach { suggestion ->
-                            RodvarListRow(
-                                onClick = { viewModel.pickCustomerSuggestion(suggestion) },
-                                leading = { IconBadge(Icons.Filled.Person, modifier = Modifier.size(36.dp)) },
-                                headline = { Text(suggestion.name, style = MaterialTheme.typography.bodyMedium) },
-                                supporting = { Text(suggestion.phone, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
-                                showChevron = false
-                            )
-                        }
-                    }
-                }
 
                 OutlinedTextField(
                     value = uiState.customerName,
@@ -181,17 +195,32 @@ fun DirectInstallationScreen(
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                 )
 
-                SectionHeader("Vehículo (opcional)")
-                RodvarListRow(
-                    onClick = { showVehicleSheet = true },
-                    leading = { IconBadge(Icons.Filled.DirectionsCar) },
-                    headline = {
-                        Text(
-                            uiState.selectedTrim?.let { "${uiState.selectedMake?.name} ${uiState.selectedModel?.name} ${uiState.selectedYear?.year} ${it.name}" }
-                                ?: "Sin seleccionar",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+                if (uiState.customerSuggestions.isNotEmpty()) {
+                    Column(modifier = Modifier.padding(top = 4.dp)) {
+                        uiState.customerSuggestions.take(4).forEach { suggestion ->
+                            RodvarListRow(
+                                onClick = { viewModel.pickCustomerSuggestion(suggestion) },
+                                leading = { IconBadge(Icons.Filled.Person, modifier = Modifier.size(36.dp)) },
+                                headline = { Text(suggestion.name, style = MaterialTheme.typography.bodyMedium) },
+                                supporting = {
+                                    Text(
+                                        listOfNotNull(suggestion.phone, suggestion.lastVehicleLabel).joinToString(" · "),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                },
+                                showChevron = false
+                            )
+                        }
                     }
+                }
+
+                SectionHeader("Vehículo")
+                VehicleSearchField(
+                    state = vehicleSearch,
+                    onQueryChange = viewModel.vehicleSearcher::onQueryChange,
+                    onSelect = viewModel.vehicleSearcher::select,
+                    onClear = viewModel.vehicleSearcher::clear
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                     OutlinedTextField(
@@ -212,49 +241,31 @@ fun DirectInstallationScreen(
                     )
                 }
 
-                SectionHeader("Productos instalados")
-                Row(
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
-                ) {
-                    Text(
-                        if (uiState.selectedProducts.isEmpty()) "Ninguno (solo mano de obra)" else "${uiState.selectedProducts.size} producto(s) · $${"%.2f".format(uiState.suggestedTotal)} MXN",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Row {
-                        TextButton(onClick = { navController.navigate(Screen.QrScanner.route) }) { Text("Escanear QR") }
-                        TextButton(onClick = { showProductSheet = true }) { Text("+ Agregar") }
-                    }
-                }
-
-                uiState.selectedProducts.forEach { selected ->
+                if (!uiState.isRevision) {
+                    SectionHeader("Productos instalados")
                     Row(
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(selected.product.name, style = MaterialTheme.typography.bodyMedium)
-                            val variant = selected.bulbTypeId?.let { id -> selected.product.variants.firstOrNull { it.bulbTypeId == id } }
-                            val unitPrice = variant?.priceOverride ?: selected.product.promotionPrice ?: selected.product.price
-                            Text("$${"%.2f".format(unitPrice)} c/u${variant?.bulbTypeName?.let { " · $it" } ?: ""}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            if (selected.inventoryUnitCodes.isNotEmpty()) {
-                                Text("QR: ${selected.inventoryUnitCodes.joinToString()}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                            }
-                        }
-                        IconButton(onClick = { viewModel.setProductQuantity(selected.product.id, selected.quantity - 1) }, enabled = selected.quantity > 1) {
-                            Icon(Icons.Filled.Remove, contentDescription = "Restar")
-                        }
-                        Text(selected.quantity.toString(), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(horizontal = 4.dp))
-                        IconButton(onClick = { viewModel.setProductQuantity(selected.product.id, selected.quantity + 1) }) {
-                            Icon(Icons.Filled.Add, contentDescription = "Sumar")
-                        }
-                        IconButton(onClick = { viewModel.toggleProduct(selected.product) }) {
-                            Icon(Icons.Filled.Close, contentDescription = "Quitar", modifier = Modifier.size(18.dp))
+                        Text(
+                            if (uiState.charge.lines.isEmpty()) "Ninguno (solo mano de obra)"
+                            else "${uiState.charge.lines.sumOf { it.quantity }} pieza(s)",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row {
+                            TextButton(onClick = { navController.navigate(Screen.QrScanner.route) }) { Text("Escanear QR") }
+                            TextButton(onClick = { showProductSheet = true }) { Text("+ Agregar") }
                         }
                     }
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+
+                    ChargeLinesEditor(
+                        lines = uiState.charge.lines,
+                        onUnitPriceChange = viewModel::onUnitPriceChange,
+                        onQuantityChange = viewModel::onQuantityChange,
+                        onRemove = viewModel::removeLine
+                    )
                 }
 
                 SectionHeader("Cobro")
@@ -266,32 +277,24 @@ fun DirectInstallationScreen(
                     onSelect = viewModel::onPaymentMethodChange,
                     modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
                 )
-                OutlinedTextField(
-                    value = uiState.totalText,
-                    onValueChange = viewModel::onTotalChange,
-                    label = { Text("Total cobrado (MXN)") },
-                    supportingText = { Text("Se sugiere la suma de productos; puedes ajustarlo a lo negociado.") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    singleLine = true,
-                    shape = MaterialTheme.shapes.medium,
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                ChargeSummaryCard(
+                    state = uiState.charge,
+                    homeVisitFee = uiState.homeVisitFee,
+                    isRevision = uiState.isRevision,
+                    onTotalChange = viewModel::onTotalChange,
+                    onVisitChargedChange = viewModel::onVisitChargedChange,
+                    onVisitCreditChange = viewModel::onVisitCreditChange,
+                    modifier = Modifier.padding(top = 8.dp)
                 )
 
-                SectionHeader("Fotos de la instalación (opcional)")
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
-                    PhotoCaptureField(
-                        label = "Antes",
-                        base64Value = uiState.beforePhotoBase64,
-                        onValueChange = viewModel::onBeforePhotoCaptured,
-                        modifier = Modifier.weight(1f)
-                    )
-                    PhotoCaptureField(
-                        label = "Después",
-                        base64Value = uiState.afterPhotoBase64,
-                        onValueChange = viewModel::onAfterPhotoCaptured,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
+                SectionHeader("Fotos y videos (opcional)")
+                MediaPickerSection(
+                    items = uiState.media,
+                    onAdd = viewModel::addMedia,
+                    onRemove = viewModel::removeMedia,
+                    onStageChange = viewModel::changeMediaStage,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
 
                 SectionHeader("Notas del técnico")
                 OutlinedTextField(
@@ -307,46 +310,15 @@ fun DirectInstallationScreen(
         }
     }
 
-    if (showVehicleSheet && uiState.completed == null) {
-        val sheetState = rememberModalBottomSheetState()
-        ModalBottomSheet(onDismissRequest = { showVehicleSheet = false }, sheetState = sheetState) {
-            Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp)) {
-                Text("Vehículo", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 12.dp))
-                DropdownSelector("Marca", uiState.makes, uiState.selectedMake, { it.name }, onSelect = viewModel::onMakeSelected, modifier = Modifier.fillMaxWidth())
-                DropdownSelector("Modelo", uiState.models, uiState.selectedModel, { it.name }, enabled = uiState.selectedMake != null, onSelect = viewModel::onModelSelected, modifier = Modifier.fillMaxWidth().padding(top = 10.dp))
-                DropdownSelector("Año", uiState.years, uiState.selectedYear, { it.year.toString() }, enabled = uiState.selectedModel != null, onSelect = viewModel::onYearSelected, modifier = Modifier.fillMaxWidth().padding(top = 10.dp))
-                DropdownSelector("Versión", uiState.trims, uiState.selectedTrim, { it.name }, enabled = uiState.selectedYear != null, onSelect = viewModel::onTrimSelected, modifier = Modifier.fillMaxWidth().padding(top = 10.dp))
-                Button(onClick = { showVehicleSheet = false }, modifier = Modifier.fillMaxWidth().padding(top = 20.dp)) { Text("Listo") }
-            }
-        }
-    }
-
     if (showProductSheet && uiState.completed == null) {
-        val sheetState = rememberModalBottomSheetState()
-        ModalBottomSheet(onDismissRequest = { showProductSheet = false }, sheetState = sheetState) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Text("Agregar productos", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
-                LazyColumn(modifier = Modifier.height(420.dp)) {
-                    items(uiState.availableProducts, key = { it.id }) { product ->
-                        val checked = uiState.selectedProducts.any { it.product.id == product.id }
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { viewModel.toggleProduct(product) }
-                                .padding(horizontal = 20.dp, vertical = 10.dp)
-                        ) {
-                            Checkbox(checked = checked, onCheckedChange = { viewModel.toggleProduct(product) })
-                            Column(modifier = Modifier.weight(1f).padding(start = 4.dp)) {
-                                Text(product.name, style = MaterialTheme.typography.bodyMedium)
-                                Text("$${"%.2f".format(product.price)} · stock ${product.stock}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                    }
-                }
-                Button(onClick = { showProductSheet = false }, modifier = Modifier.fillMaxWidth().padding(20.dp)) { Text("Listo") }
-            }
-        }
+        ProductPickerSheet(
+            products = uiState.availableProducts,
+            countOf = { productId, variantId ->
+                uiState.charge.lines.filter { it.productId == productId && it.variantId == variantId }.sumOf { it.quantity }
+            },
+            onPick = viewModel::addProduct,
+            onDismiss = { showProductSheet = false }
+        )
     }
 }
 
@@ -356,7 +328,7 @@ private fun SuccessContent(
     completed: DirectInstallationResponse,
     customerName: String,
     customerPhone: String,
-    onSignWarranty: () -> Unit,
+    onSignWarranty: (() -> Unit)?,
     onSharePortal: () -> Unit,
     onDone: () -> Unit,
     modifier: Modifier = Modifier
@@ -372,7 +344,11 @@ private fun SuccessContent(
             tint = MaterialTheme.colorScheme.secondary,
             modifier = Modifier.size(72.dp)
         )
-        Text("Instalación registrada", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(top = 16.dp))
+        Text(
+            if (onSignWarranty != null) "Instalación registrada" else "Revisión registrada",
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.padding(top = 16.dp)
+        )
         Text(
             "${completed.folio} · $${"%.2f".format(completed.totalAmount)} MXN",
             style = MaterialTheme.typography.bodyLarge,
@@ -388,11 +364,13 @@ private fun SuccessContent(
             )
         }
 
-        Button(onClick = onSignWarranty, modifier = Modifier.fillMaxWidth().padding(top = 28.dp)) {
-            Icon(Icons.Filled.Verified, contentDescription = null, modifier = Modifier.size(18.dp))
-            Text("Firmar garantía ahora", modifier = Modifier.padding(start = 8.dp))
+        if (onSignWarranty != null) {
+            Button(onClick = onSignWarranty, modifier = Modifier.fillMaxWidth().padding(top = 28.dp)) {
+                Icon(Icons.Filled.Verified, contentDescription = null, modifier = Modifier.size(18.dp))
+                Text("Firmar garantía ahora", modifier = Modifier.padding(start = 8.dp))
+            }
         }
-        OutlinedButton(onClick = onSharePortal, modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
+        OutlinedButton(onClick = onSharePortal, modifier = Modifier.fillMaxWidth().padding(top = if (onSignWarranty != null) 10.dp else 28.dp)) {
             Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(18.dp))
             Text("Enviar portal por WhatsApp", modifier = Modifier.padding(start = 8.dp))
         }

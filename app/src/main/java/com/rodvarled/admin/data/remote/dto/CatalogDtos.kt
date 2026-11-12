@@ -96,6 +96,7 @@ data class StockAdjustRequest(
     val note: String? = null,
     val unitCostUsd: Double? = null,
     val exchangeRate: Double? = null,
+    val unitCostMxn: Double? = null,
     val purchaseDate: String? = null,
     val receivedDate: String? = null
 )
@@ -205,6 +206,30 @@ data class InventoryUnit(
     val purchaseUnitCostMxn: Double? = null,
     val purchaseDate: String? = null,
     val receivedDate: String? = null
+)
+
+/** Entrada de mercancía en un solo paso: stock + costo por pieza + (opcional) etiquetas QR. */
+@Serializable
+data class ReceiveInventoryRequest(
+    val productId: Int,
+    /** Id de la variante (`BulbTypeVariant.id`), no el del tipo de foco. */
+    val productBulbTypeId: Int? = null,
+    val quantity: Int,
+    val unitCostMxn: Double? = null,
+    val unitCostUsd: Double? = null,
+    val exchangeRate: Double? = null,
+    val note: String? = null,
+    val createLabels: Boolean = true
+)
+
+@Serializable
+data class ReceiveInventoryResult(
+    val productId: Int,
+    val productBulbTypeId: Int? = null,
+    val quantityReceived: Int,
+    val unitCostMxn: Double,
+    val newStock: Int,
+    val units: List<InventoryUnit> = emptyList()
 )
 
 @Serializable

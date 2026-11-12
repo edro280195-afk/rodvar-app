@@ -25,7 +25,8 @@ import com.rodvarled.admin.ui.inventory.InventoryListScreen
 import com.rodvarled.admin.ui.inventory.ProductDetailScreen
 import com.rodvarled.admin.ui.inventory.PricingScreen
 import com.rodvarled.admin.ui.inventory.ProductFormScreen
-import com.rodvarled.admin.ui.inventory.InventoryLabelsScreen
+import com.rodvarled.admin.ui.inventory.StockEntryScreen
+import com.rodvarled.admin.ui.media.InstallationMediaScreen
 import com.rodvarled.admin.ui.more.MoreScreen
 import com.rodvarled.admin.ui.profile.ProfileScreen
 import com.rodvarled.admin.ui.quotes.QuoteDetailScreen
@@ -125,7 +126,19 @@ fun RodvarNavHost(navController: NavHostController, modifier: Modifier = Modifie
             Screen.InventoryLabels.route,
             arguments = listOf(navArgument("id") { type = NavType.IntType })
         ) {
-            InventoryLabelsScreen(navController = navController)
+            StockEntryScreen(navController = navController)
+        }
+        composable(
+            Screen.InstallationMedia.route,
+            arguments = listOf(navArgument("id") { type = NavType.IntType })
+        ) {
+            InstallationMediaScreen(navController = navController)
+        }
+        composable(
+            Screen.ReceiveStock.route,
+            arguments = listOf(navArgument("productId") { type = NavType.IntType; defaultValue = -1 })
+        ) {
+            StockEntryScreen(navController = navController)
         }
         composable(
             Screen.Pricing.route,

@@ -18,9 +18,13 @@ data class QuoteSummary(
 @Serializable
 data class QuoteItemDetail(
     val productId: Int,
+    val productBulbTypeId: Int? = null,
     val productName: String,
     val quantity: Int,
+    val listUnitPrice: Double = 0.0,
     val unitPrice: Double,
+    val discountAmount: Double = 0.0,
+    val priceRuleName: String? = null,
     val subtotal: Double
 )
 

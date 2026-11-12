@@ -26,3 +26,14 @@ data class VehicleTrimDto(
     val id: Int,
     val name: String
 )
+
+/** Un vehículo completo encontrado al escribir ("civic 2018"). `trimId` es lo que guardan citas e instalaciones. */
+@Serializable
+data class VehicleSearchHit(
+    val trimId: Int,
+    val label: String,
+    val make: String = "",
+    val model: String = "",
+    val year: Int = 0,
+    val trim: String = ""
+)

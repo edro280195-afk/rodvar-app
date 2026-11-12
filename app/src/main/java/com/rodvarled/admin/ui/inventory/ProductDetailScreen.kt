@@ -126,6 +126,9 @@ fun ProductDetailScreen(
                         IconButton(onClick = { navController.navigate(Screen.Pricing.of(it.id)) }) {
                             Icon(Icons.Filled.LocalOffer, contentDescription = "Promociones", tint = RodvarPrimary)
                         }
+                        IconButton(onClick = { navController.navigate(Screen.ReceiveStock.create(it.id)) }) {
+                            Icon(Icons.Filled.Inventory2, contentDescription = "Recibir mercancía", tint = RodvarPrimary)
+                        }
                         IconButton(onClick = { navController.navigate(Screen.InventoryLabels.of(it.id)) }) {
                             Icon(Icons.Filled.Print, contentDescription = "Imprimir etiquetas QR", tint = RodvarPrimary)
                         }
@@ -282,16 +285,12 @@ fun ProductDetailScreen(
         val bulbTypeId = showAdjustDialog!!.takeIf { it != -1 }
         StockAdjustDialog(
             onDismiss = { showAdjustDialog = null },
-            onConfirm = { delta, reason, note, unitCostUsd, exchangeRate, purchaseDate, receivedDate ->
+            onConfirm = { delta, reason, note ->
                 viewModel.adjustWithReason(
                     bulbTypeId = bulbTypeId,
                     delta = delta,
                     reason = reason,
-                    note = note,
-                    unitCostUsd = unitCostUsd,
-                    exchangeRate = exchangeRate,
-                    purchaseDate = purchaseDate,
-                    receivedDate = receivedDate
+                    note = note
                 )
                 showAdjustDialog = null
             }
@@ -346,105 +345,49 @@ private fun StockRow(
 @Composable
 private fun StockAdjustDialog(
     onDismiss: () -> Unit,
-    onConfirm: (
-        delta: Int,
-        reason: String,
-        note: String?,
-        unitCostUsd: Double?,
-        exchangeRate: Double?,
-        purchaseDate: String?,
-        receivedDate: String?
-    ) -> Unit
+    onConfirm: (delta: Int, reason: String, note: String?) -> Unit
 ) {
     var quantity by remember { mutableStateOf("") }
-    var isAddition by remember { mutableStateOf(true) }
+    var isAddition by remember { mutableStateOf(false) }
     var reason by remember { mutableStateOf(STOCK_ADJUST_REASONS.first()) }
     var note by remember { mutableStateOf("") }
-    var unitCostUsd by remember { mutableStateOf("") }
-    var exchangeRate by remember { mutableStateOf("") }
-    var purchaseDate by remember { mutableStateOf(java.time.LocalDate.now().toString()) }
-    var receivedDate by remember { mutableStateOf(java.time.LocalDate.now().toString()) }
-    val isPurchase = isAddition && reason == "Compra"
-    val parsedUsd = unitCostUsd.toDoubleOrNull()
-    val parsedExchangeRate = exchangeRate.toDoubleOrNull()
     val quantityValue = quantity.toIntOrNull() ?: 0
-    val canConfirm = quantityValue > 0 && (!isPurchase || (parsedUsd ?: 0.0) > 0 && (parsedExchangeRate ?: 0.0) > 0)
+    val canConfirm = quantityValue > 0
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Ajustar Inventario Manual", fontWeight = FontWeight.Bold) },
+        title = { Text("Corregir inventario", fontWeight = FontWeight.Bold) },
         text = {
             Column {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Para mercancía nueva que llegó usa «Recibir mercancía»: ahí se guarda lo que costó y se imprimen las etiquetas.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 10.dp)) {
+                    FilterChip(selected = !isAddition, onClick = { isAddition = false }, label = { Text("Salida (−)") })
                     FilterChip(selected = isAddition, onClick = { isAddition = true }, label = { Text("Entrada (+)") })
-                    FilterChip(
-                        selected = !isAddition,
-                        onClick = {
-                            isAddition = false
-                            if (reason == "Compra") reason = "Ajuste"
-                        },
-                        label = { Text("Salida (-)") }
-                    )
                 }
                 OutlinedTextField(
                     value = quantity,
                     onValueChange = { quantity = it.filter { c -> c.isDigit() } },
-                    label = { Text("Cantidad de Unidades") },
+                    label = { Text("Cantidad de piezas") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                 )
                 DropdownSelector(
-                    label = "Motivo del Ajuste",
+                    label = "Motivo",
                     items = STOCK_ADJUST_REASONS,
                     selected = reason,
                     labelOf = { it },
                     onSelect = { reason = it },
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                 )
-                if (isPurchase) {
-                    Text(
-                        "Captura el costo de compra en USD y el tipo de cambio de ese día. La fecha de recepción puede ser posterior.",
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        OutlinedTextField(
-                            value = unitCostUsd,
-                            onValueChange = { unitCostUsd = it },
-                            label = { Text("USD por foco") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                            modifier = Modifier.weight(1f)
-                        )
-                        OutlinedTextField(
-                            value = exchangeRate,
-                            onValueChange = { exchangeRate = it },
-                            label = { Text("Tipo de cambio") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        OutlinedTextField(
-                            value = purchaseDate,
-                            onValueChange = { purchaseDate = it },
-                            label = { Text("Fecha compra") },
-                            supportingText = { Text("AAAA-MM-DD") },
-                            modifier = Modifier.weight(1f)
-                        )
-                        OutlinedTextField(
-                            value = receivedDate,
-                            onValueChange = { receivedDate = it },
-                            label = { Text("Fecha recepción") },
-                            supportingText = { Text("AAAA-MM-DD") },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
                 OutlinedTextField(
                     value = note,
                     onValueChange = { note = it },
-                    label = { Text("Nota / Referencia (opcional)") },
+                    label = { Text("Nota (opcional)") },
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                 )
             }
@@ -452,21 +395,11 @@ private fun StockAdjustDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    if (canConfirm) {
-                        onConfirm(
-                            if (isAddition) quantityValue else -quantityValue,
-                            reason,
-                            note.ifBlank { null },
-                            parsedUsd,
-                            parsedExchangeRate,
-                            purchaseDate.ifBlank { null },
-                            receivedDate.ifBlank { null }
-                        )
-                    }
+                    if (canConfirm) onConfirm(if (isAddition) quantityValue else -quantityValue, reason, note.ifBlank { null })
                 },
                 enabled = canConfirm,
                 colors = ButtonDefaults.buttonColors(containerColor = RodvarPrimary)
-            ) { Text("Aplicar Ajuste", fontWeight = FontWeight.Bold) }
+            ) { Text("Aplicar", fontWeight = FontWeight.Bold) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
     )

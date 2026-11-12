@@ -29,8 +29,7 @@ data class InventoryListUiState(
     val onlyLowStock: Boolean = false,
     val query: String = "",
     val snackbarMessage: String? = null,
-    val error: String? = null,
-    val purchaseProduct: ProductDetail? = null
+    val error: String? = null
 ) {
     val totalProductsCount: Int get() = all.size
     val totalStockUnits: Int get() = all.sumOf { it.effectiveStock() }
@@ -82,11 +81,6 @@ class InventoryListViewModel @Inject constructor(
         val currentStock = product.effectiveStock()
         if (currentStock + delta < 0) return
 
-        if (delta > 0) {
-            _uiState.value = _uiState.value.copy(purchaseProduct = product, error = null)
-            return
-        }
-
         viewModelScope.launch {
             repository.adjustStock(
                 productId = product.id,
@@ -98,44 +92,6 @@ class InventoryListViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(snackbarMessage = "Stock de '${product.name}' actualizado")
             }.onFailure { err ->
                 _uiState.value = _uiState.value.copy(error = err.toUserMessage())
-            }
-        }
-    }
-
-    fun dismissPurchaseDialog() {
-        _uiState.value = _uiState.value.copy(purchaseProduct = null)
-    }
-
-    fun registerPurchase(
-        product: ProductDetail,
-        bulbTypeId: Int?,
-        quantity: Int,
-        unitCostUsd: Double,
-        exchangeRate: Double,
-        purchaseDate: String,
-        receivedDate: String
-    ) {
-        if (quantity <= 0 || unitCostUsd <= 0 || exchangeRate <= 0) {
-            _uiState.value = _uiState.value.copy(error = "Captura cantidad, costo en USD y tipo de cambio válidos.")
-            return
-        }
-
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(purchaseProduct = null, isLoading = true, error = null)
-            repository.adjustStock(
-                productId = product.id,
-                bulbTypeId = bulbTypeId,
-                delta = quantity,
-                reason = "Compra",
-                note = "Compra registrada con costo histórico en USD",
-                unitCostUsd = unitCostUsd,
-                exchangeRate = exchangeRate,
-                purchaseDate = purchaseDate.ifBlank { null },
-                receivedDate = receivedDate.ifBlank { null }
-            ).onSuccess {
-                _uiState.value = _uiState.value.copy(isLoading = false, snackbarMessage = "Compra registrada: $quantity pieza(s) a $${"%.2f".format(unitCostUsd)} USD.")
-            }.onFailure { err ->
-                _uiState.value = _uiState.value.copy(isLoading = false, error = err.toUserMessage())
             }
         }
     }

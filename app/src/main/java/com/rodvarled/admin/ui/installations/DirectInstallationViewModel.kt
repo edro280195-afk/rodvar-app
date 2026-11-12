@@ -2,24 +2,34 @@ package com.rodvarled.admin.ui.installations
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.rodvarled.admin.core.media.LocalMedia
+import com.rodvarled.admin.core.media.MediaFiles
+import com.rodvarled.admin.core.media.MediaStage
+import com.rodvarled.admin.core.media.MediaUploadScheduler
+import com.rodvarled.admin.core.pricing.ChargeMath
+import com.rodvarled.admin.core.pricing.ChargeState
+import com.rodvarled.admin.core.pricing.toChargeLine
 import com.rodvarled.admin.core.util.toUserMessage
+import com.rodvarled.admin.data.remote.dto.BulbTypeVariant
+import com.rodvarled.admin.data.remote.dto.CreateDirectInstallationItem
 import com.rodvarled.admin.data.remote.dto.CreateDirectInstallationRequest
-import com.rodvarled.admin.data.remote.dto.CreateQuoteItemRequest
-import com.rodvarled.admin.data.remote.dto.CustomerListItem
+import com.rodvarled.admin.data.remote.dto.CustomerLookup
+import com.rodvarled.admin.data.remote.dto.DEFAULT_HOME_VISIT_FEE
 import com.rodvarled.admin.data.remote.dto.DirectInstallationResponse
-import com.rodvarled.admin.data.remote.dto.ProductDetail
-import com.rodvarled.admin.data.remote.dto.VehicleMakeDto
-import com.rodvarled.admin.data.remote.dto.VehicleModelDto
-import com.rodvarled.admin.data.remote.dto.VehicleTrimDto
-import com.rodvarled.admin.data.remote.dto.VehicleYearDto
 import com.rodvarled.admin.data.remote.dto.InventoryUnit
+import com.rodvarled.admin.data.remote.dto.ProductDetail
+import com.rodvarled.admin.data.remote.dto.SERVICE_TYPE_INSTALLATION
+import com.rodvarled.admin.data.remote.dto.SERVICE_TYPE_REVISION
 import com.rodvarled.admin.data.repository.CatalogRepository
 import com.rodvarled.admin.data.repository.CustomersRepository
-import com.rodvarled.admin.data.repository.InventoryRepository
 import com.rodvarled.admin.data.repository.InstallationsRepository
+import com.rodvarled.admin.data.repository.InventoryRepository
+import com.rodvarled.admin.data.repository.SettingsRepository
 import com.rodvarled.admin.data.repository.VehiclesRepository
-import com.rodvarled.admin.ui.appointments.SelectedProduct
+import com.rodvarled.admin.ui.components.VehicleSearcher
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -31,60 +41,51 @@ data class DirectInstallationUiState(
 
     val customerName: String = "",
     val customerPhone: String = "",
-    val customerSuggestions: List<CustomerListItem> = emptyList(),
+    val customerSuggestions: List<CustomerLookup> = emptyList(),
 
-    val makes: List<VehicleMakeDto> = emptyList(),
-    val models: List<VehicleModelDto> = emptyList(),
-    val years: List<VehicleYearDto> = emptyList(),
-    val trims: List<VehicleTrimDto> = emptyList(),
-    val selectedMake: VehicleMakeDto? = null,
-    val selectedModel: VehicleModelDto? = null,
-    val selectedYear: VehicleYearDto? = null,
-    val selectedTrim: VehicleTrimDto? = null,
     val vehiclePlate: String = "",
     val vehicleColor: String = "",
 
     val availableProducts: List<ProductDetail> = emptyList(),
-    val selectedProducts: List<SelectedProduct> = emptyList(),
 
+    /** "Instalacion" o "Revision" (solo se cobra la visita a domicilio). */
+    val serviceType: String = SERVICE_TYPE_INSTALLATION,
+    /** Renglones, revisión y total. El total sugerido es la suma; se puede cambiar a lo negociado. */
+    val charge: ChargeState = ChargeState(),
+    val homeVisitFee: Double = DEFAULT_HOME_VISIT_FEE,
     val paymentMethod: String = "Efectivo",
-    val totalText: String = "",
-    // Mientras el usuario no toque el total, se sugiere la suma de los productos;
-    // en cuanto lo edita (negociación en el momento), se respeta su número.
-    val totalEditedManually: Boolean = false,
+
     val technicianNotes: String = "",
-    val beforePhotoBase64: String? = null,
-    val afterPhotoBase64: String? = null,
+    /** Fotos y videos del trabajo: se guardan en el teléfono y se suben solos al registrar. */
+    val media: List<LocalMedia> = emptyList(),
 
     val completed: DirectInstallationResponse? = null
 ) {
-    val suggestedTotal: Double get() = selectedProducts.sumOf { selected ->
-        val variantPrice = selected.bulbTypeId?.let { id -> selected.product.variants.firstOrNull { it.bulbTypeId == id }?.priceOverride }
-        (variantPrice ?: selected.product.promotionPrice ?: selected.product.price) * selected.quantity
-    }
+    val isRevision: Boolean get() = serviceType == SERVICE_TYPE_REVISION
 }
 
 @HiltViewModel
 class DirectInstallationViewModel @Inject constructor(
     private val installationsRepository: InstallationsRepository,
     private val customersRepository: CustomersRepository,
-    private val vehiclesRepository: VehiclesRepository,
+    vehiclesRepository: VehiclesRepository,
     private val catalogRepository: CatalogRepository,
-    private val inventoryRepository: InventoryRepository
+    private val inventoryRepository: InventoryRepository,
+    private val settingsRepository: SettingsRepository,
+    private val mediaScheduler: MediaUploadScheduler
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DirectInstallationUiState())
     val uiState = _uiState.asStateFlow()
 
-    init {
-        loadMakes()
-        loadProducts()
-    }
+    /** Búsqueda de vehículo por texto ("civic 2018"). */
+    val vehicleSearcher = VehicleSearcher(viewModelScope, vehiclesRepository)
 
-    private fun loadMakes() {
-        viewModelScope.launch {
-            vehiclesRepository.getMakes().onSuccess { _uiState.value = _uiState.value.copy(makes = it) }
-        }
+    private var customerLookupJob: Job? = null
+
+    init {
+        loadProducts()
+        loadHomeVisitFee()
     }
 
     private fun loadProducts() {
@@ -96,75 +97,111 @@ class DirectInstallationViewModel @Inject constructor(
         viewModelScope.launch { catalogRepository.refresh() }
     }
 
+    private fun loadHomeVisitFee() {
+        viewModelScope.launch {
+            val fee = settingsRepository.getHomeVisitFee()
+            val state = _uiState.value
+            // Si ya se eligió "solo revisión" antes de que llegara la tarifa, se ajusta el cobro.
+            val charge = if (state.isRevision && state.charge.visitFeeCharged == state.homeVisitFee) {
+                ChargeMath.withVisitFeeCharged(state.charge, fee)
+            } else state.charge
+            _uiState.value = state.copy(homeVisitFee = fee, charge = charge)
+        }
+    }
+
     fun onCustomerNameChange(value: String) {
         _uiState.value = _uiState.value.copy(customerName = value)
+        lookupCustomers(value, minLength = 2)
     }
 
     fun onCustomerPhoneChange(value: String) {
         _uiState.value = _uiState.value.copy(customerPhone = value)
-        if (value.length >= 3) {
-            viewModelScope.launch {
-                customersRepository.search(value).onSuccess {
-                    _uiState.value = _uiState.value.copy(customerSuggestions = it)
-                }
-            }
-        } else {
+        lookupCustomers(value, minLength = 3)
+    }
+
+    private fun lookupCustomers(term: String, minLength: Int) {
+        customerLookupJob?.cancel()
+        if (term.trim().length < minLength) {
             _uiState.value = _uiState.value.copy(customerSuggestions = emptyList())
+            return
+        }
+        customerLookupJob = viewModelScope.launch {
+            delay(250)
+            customersRepository.lookup(term.trim()).onSuccess {
+                _uiState.value = _uiState.value.copy(customerSuggestions = it)
+            }
         }
     }
 
-    fun pickCustomerSuggestion(customer: CustomerListItem) {
+    /** Al elegir un cliente conocido se rellenan solos su nombre, teléfono y último vehículo. */
+    fun pickCustomerSuggestion(customer: CustomerLookup) {
+        customerLookupJob?.cancel()
         _uiState.value = _uiState.value.copy(
             customerName = customer.name,
             customerPhone = customer.phone,
             customerSuggestions = emptyList()
         )
-    }
-
-    fun onMakeSelected(make: VehicleMakeDto) {
-        _uiState.value = _uiState.value.copy(selectedMake = make, models = emptyList(), years = emptyList(), trims = emptyList(), selectedModel = null, selectedYear = null, selectedTrim = null)
-        viewModelScope.launch {
-            vehiclesRepository.getModels(make.id).onSuccess { _uiState.value = _uiState.value.copy(models = it) }
+        if (vehicleSearcher.state.value.selected == null && customer.lastVehicleTrimId != null && !customer.lastVehicleLabel.isNullOrBlank()) {
+            vehicleSearcher.selectKnown(customer.lastVehicleTrimId, customer.lastVehicleLabel)
         }
-    }
-
-    fun onModelSelected(model: VehicleModelDto) {
-        _uiState.value = _uiState.value.copy(selectedModel = model, years = emptyList(), trims = emptyList(), selectedYear = null, selectedTrim = null)
-        viewModelScope.launch {
-            vehiclesRepository.getYears(model.id).onSuccess { _uiState.value = _uiState.value.copy(years = it) }
-        }
-    }
-
-    fun onYearSelected(year: VehicleYearDto) {
-        _uiState.value = _uiState.value.copy(selectedYear = year, trims = emptyList(), selectedTrim = null)
-        viewModelScope.launch {
-            vehiclesRepository.getTrims(year.id).onSuccess { _uiState.value = _uiState.value.copy(trims = it) }
-        }
-    }
-
-    fun onTrimSelected(trim: VehicleTrimDto) {
-        _uiState.value = _uiState.value.copy(selectedTrim = trim)
     }
 
     fun onPlateChange(value: String) { _uiState.value = _uiState.value.copy(vehiclePlate = value) }
     fun onColorChange(value: String) { _uiState.value = _uiState.value.copy(vehicleColor = value) }
     fun onPaymentMethodChange(value: String) { _uiState.value = _uiState.value.copy(paymentMethod = value) }
     fun onNotesChange(value: String) { _uiState.value = _uiState.value.copy(technicianNotes = value) }
-    fun onBeforePhotoCaptured(base64: String?) { _uiState.value = _uiState.value.copy(beforePhotoBase64 = base64) }
-    fun onAfterPhotoCaptured(base64: String?) { _uiState.value = _uiState.value.copy(afterPhotoBase64 = base64) }
 
-    fun onTotalChange(value: String) {
-        _uiState.value = _uiState.value.copy(totalText = value, totalEditedManually = true)
+    // ----- Fotos y videos -----
+
+    fun addMedia(items: List<LocalMedia>) {
+        _uiState.value = _uiState.value.copy(media = _uiState.value.media + items)
     }
 
-    fun toggleProduct(product: ProductDetail) {
-        val current = _uiState.value.selectedProducts
-        val existing = current.find { it.product.id == product.id }
-        _uiState.value = _uiState.value.copy(
-            selectedProducts = if (existing != null) current.filter { it.product.id != product.id }
-            else current + SelectedProduct(product, 1)
-        )
-        syncSuggestedTotal()
+    fun removeMedia(item: LocalMedia) {
+        MediaFiles.discard(item)
+        _uiState.value = _uiState.value.copy(media = _uiState.value.media.filterNot { it.id == item.id })
+    }
+
+    fun changeMediaStage(item: LocalMedia, stage: MediaStage) {
+        _uiState.value = _uiState.value.copy(media = _uiState.value.media.map { if (it.id == item.id) it.copy(stage = stage) else it })
+    }
+
+    private var mediaHandedOff = false
+
+    override fun onCleared() {
+        // Si se salió sin registrar el trabajo, los archivos que no se mandaron a subir se borran del teléfono.
+        if (!mediaHandedOff) _uiState.value.media.forEach(MediaFiles::discard)
+        super.onCleared()
+    }
+
+    /** Cambia entre instalar productos y "solo revisión" (se cobra la visita y no hay productos ni garantía). */
+    fun onServiceTypeChange(serviceType: String) {
+        val state = _uiState.value
+        if (state.serviceType == serviceType) return
+        val charge = if (serviceType == SERVICE_TYPE_REVISION) {
+            ChargeState(visitFeeCharged = state.homeVisitFee)
+        } else {
+            ChargeState()
+        }
+        _uiState.value = state.copy(serviceType = serviceType, charge = charge, error = null)
+    }
+
+    // ----- Cobro -----
+
+    fun addProduct(product: ProductDetail, variant: BulbTypeVariant?) {
+        val state = _uiState.value
+        _uiState.value = state.copy(charge = ChargeMath.withAddedLine(state.charge, product.toChargeLine(variant)), error = null)
+    }
+
+    fun onUnitPriceChange(key: String, price: Double) = updateCharge { ChargeMath.withUnitPrice(it, key, price) }
+    fun onQuantityChange(key: String, quantity: Int) = updateCharge { ChargeMath.withQuantity(it, key, quantity) }
+    fun removeLine(key: String) = updateCharge { ChargeMath.withoutLine(it, key) }
+    fun onTotalChange(total: Double) = updateCharge { ChargeMath.withTotal(it, total) }
+    fun onVisitChargedChange(amount: Double) = updateCharge { ChargeMath.withVisitFeeCharged(it, amount) }
+    fun onVisitCreditChange(amount: Double) = updateCharge { ChargeMath.withVisitFeeCredit(it, amount) }
+
+    private fun updateCharge(transform: (ChargeState) -> ChargeState) {
+        _uiState.value = _uiState.value.let { it.copy(charge = transform(it.charge)) }
     }
 
     fun onInventoryUnitScanned(code: String) {
@@ -188,35 +225,17 @@ class DirectInstallationViewModel @Inject constructor(
             return
         }
 
-        val current = _uiState.value.selectedProducts
-        val existing = current.firstOrNull { it.product.id == unit.productId && it.bulbTypeId == unit.productBulbTypeId }
-        val updated = if (existing != null) {
-            current.map {
-                if (it === existing) it.copy(quantity = it.quantity + 1, inventoryUnitCodes = it.inventoryUnitCodes + unit.code) else it
-            }
-        } else {
-            current + SelectedProduct(product, 1, unit.productBulbTypeId, listOf(unit.code))
-        }
-
-        _uiState.value = _uiState.value.copy(selectedProducts = updated, error = null)
-        syncSuggestedTotal()
-    }
-
-    fun setProductQuantity(productId: Int, quantity: Int) {
-        if (quantity < 1) return
-        _uiState.value = _uiState.value.copy(
-            selectedProducts = _uiState.value.selectedProducts.map {
-                if (it.product.id == productId) it.copy(quantity = quantity) else it
-            }
-        )
-        syncSuggestedTotal()
-    }
-
-    private fun syncSuggestedTotal() {
+        val variant = unit.productBulbTypeId?.let { id -> product.variants.firstOrNull { it.id == id } }
         val state = _uiState.value
-        if (state.totalEditedManually) return
-        val suggested = state.suggestedTotal
-        _uiState.value = state.copy(totalText = if (suggested > 0) "%.2f".format(suggested) else "")
+        _uiState.value = state.copy(
+            // Escanear una caja implica instalar producto: si estaba en "solo revisión", pasa a instalación.
+            serviceType = SERVICE_TYPE_INSTALLATION,
+            charge = ChargeMath.withScannedUnit(
+                if (state.isRevision) ChargeState() else state.charge,
+                unit.code
+            ) { product.toChargeLine(variant) },
+            error = null
+        )
     }
 
     fun submit() {
@@ -225,9 +244,14 @@ class DirectInstallationViewModel @Inject constructor(
             _uiState.value = state.copy(error = "El nombre y el teléfono del cliente son obligatorios.")
             return
         }
-        val total = state.totalText.replace(",", "").trim().toDoubleOrNull()
-        if (total == null || total < 0) {
-            _uiState.value = state.copy(error = "Captura el total cobrado (un número válido).")
+        val charge = state.charge
+        if (state.isRevision && charge.lines.isNotEmpty()) {
+            _uiState.value = state.copy(error = "Una revisión no lleva productos. Cambia a Instalación o quítalos.")
+            return
+        }
+
+        ChargeMath.scanProblem(charge)?.let {
+            _uiState.value = state.copy(error = it)
             return
         }
 
@@ -236,23 +260,27 @@ class DirectInstallationViewModel @Inject constructor(
             val request = CreateDirectInstallationRequest(
                 customerName = state.customerName.trim(),
                 customerPhone = state.customerPhone.trim(),
-                vehicleTrimId = state.selectedTrim?.id,
+                vehicleTrimId = vehicleSearcher.selectedTrimId,
                 vehiclePlate = state.vehiclePlate.ifBlank { null },
                 vehicleColor = state.vehicleColor.ifBlank { null },
                 technicianNotes = state.technicianNotes.ifBlank { null },
                 paymentMethod = state.paymentMethod,
-                totalAmount = total,
-                items = state.selectedProducts.map {
-                    CreateQuoteItemRequest(it.product.id, it.quantity, it.bulbTypeId, it.inventoryUnitCodes)
+                totalAmount = charge.total,
+                serviceType = state.serviceType,
+                visitFeeCharged = charge.visitFeeCharged.takeIf { it > 0.0 },
+                visitFeeCredit = charge.visitFeeCredit.takeIf { it > 0.0 },
+                items = charge.lines.map {
+                    // El precio que se ve en pantalla es el que se cobra y el que queda registrado.
+                    CreateDirectInstallationItem(it.productId, it.quantity, it.variantId, it.unitPrice, it.inventoryUnitCodes)
                 }
             )
 
             installationsRepository.createDirectInstallation(request)
                 .onSuccess { response ->
-                    // Las fotos (opcionales) se suben después de creada la instalación,
-                    // igual que en el flujo de cita completada.
-                    if (state.afterPhotoBase64 != null) {
-                        installationsRepository.addPhoto(response.installationId, null, state.beforePhotoBase64, state.afterPhotoBase64)
+                    // Las fotos y videos (opcionales) se suben en segundo plano, ya con la instalación creada.
+                    if (state.media.isNotEmpty()) {
+                        mediaScheduler.enqueue(response.installationId, state.media)
+                        mediaHandedOff = true
                     }
                     _uiState.value = _uiState.value.copy(isSaving = false, completed = response)
                 }

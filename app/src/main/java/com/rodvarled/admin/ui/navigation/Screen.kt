@@ -34,6 +34,13 @@ sealed class Screen(val route: String) {
     object ProductDetail : Screen("inventory/{id}") {
         fun of(id: Int) = "inventory/$id"
     }
+    object InstallationMedia : Screen("installation/{id}/media") {
+        fun of(id: Int) = "installation/$id/media"
+    }
+    object ReceiveStock : Screen("inventory-receive?productId={productId}") {
+        fun create(productId: Int? = null) =
+            if (productId != null) "inventory-receive?productId=$productId" else "inventory-receive"
+    }
     object InventoryLabels : Screen("inventory/{id}/labels") {
         fun of(id: Int) = "inventory/$id/labels"
     }

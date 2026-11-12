@@ -13,6 +13,7 @@ import com.rodvarled.admin.data.remote.api.InstallationsApi
 import com.rodvarled.admin.data.remote.api.NotificationsApi
 import com.rodvarled.admin.data.remote.api.PricingApi
 import com.rodvarled.admin.data.remote.api.ReportsApi
+import com.rodvarled.admin.data.remote.api.SettingsApi
 import com.rodvarled.admin.data.remote.api.InventoryApi
 import com.rodvarled.admin.data.remote.api.QuotesApi
 import com.rodvarled.admin.data.remote.api.ReviewsApi
@@ -165,4 +166,8 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideInventoryApi(@AuthenticatedClient retrofit: Retrofit): InventoryApi = retrofit.create(InventoryApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideSettingsApi(@AuthenticatedClient retrofit: Retrofit): SettingsApi = retrofit.create(SettingsApi::class.java)
 }

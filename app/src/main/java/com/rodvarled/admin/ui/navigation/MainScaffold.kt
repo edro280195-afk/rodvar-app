@@ -33,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
+import com.rodvarled.admin.ui.media.MediaUploadBanner
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.rodvarled.admin.ui.theme.RodvarOutline
 import com.rodvarled.admin.ui.theme.RodvarPrimary
@@ -64,6 +65,8 @@ fun MainScaffold(navController: NavHostController) {
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             Column {
+                // Avisa de fotos y videos que se están subiendo (o que fallaron) sin importar en qué pantalla estés.
+                MediaUploadBanner()
                 Box(Modifier.fillMaxWidth().height(1.dp).background(RodvarOutline))
                 NavigationBar(
                     containerColor = RodvarSurface,

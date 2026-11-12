@@ -2,6 +2,20 @@ package com.rodvarled.admin.data.remote.dto
 
 import kotlinx.serialization.Serializable
 
+/** Cliente para autocompletar un formulario, con su último vehículo y domicilio de servicio. */
+@Serializable
+data class CustomerLookup(
+    val id: Int,
+    val name: String,
+    val phone: String,
+    val lastVehicleTrimId: Int? = null,
+    val lastVehicleLabel: String? = null,
+    val lastServiceAddress: String? = null,
+    val lastServiceLatitude: Double? = null,
+    val lastServiceLongitude: Double? = null,
+    val lastGooglePlaceId: String? = null
+)
+
 @Serializable
 data class CustomerListItem(
     val id: Int,

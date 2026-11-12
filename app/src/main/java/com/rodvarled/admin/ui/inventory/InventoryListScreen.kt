@@ -102,7 +102,17 @@ fun InventoryListScreen(navController: NavHostController, viewModel: InventoryLi
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        topBar = { TopAppBar(title = { Text("Inventario de Focos LED", fontWeight = FontWeight.Bold) }) },
+        topBar = {
+            TopAppBar(
+                title = { Text("Inventario de Focos LED", fontWeight = FontWeight.Bold) },
+                actions = {
+                    TextButton(onClick = { navController.navigate(Screen.ReceiveStock.create()) }) {
+                        Icon(Icons.Filled.Inventory2, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Text("Recibir mercancía", modifier = Modifier.padding(start = 6.dp))
+                    }
+                }
+            )
+        },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { navController.navigate(Screen.ProductForm.create()) },
@@ -178,7 +188,8 @@ fun InventoryListScreen(navController: NavHostController, viewModel: InventoryLi
                             InventoryProductCard(
                                 product = product,
                                 onClick = { navController.navigate(Screen.ProductDetail.of(product.id)) },
-                                onIncrementStock = { viewModel.adjustStock(product, +1) },
+                                // Sumar piezas es dar entrada a mercancía: va a la pantalla que guarda costo y etiquetas.
+                                onIncrementStock = { navController.navigate(Screen.ReceiveStock.create(product.id)) },
                                 onDecrementStock = { viewModel.adjustStock(product, -1) },
                                 canDecrementStock = product.variants.isEmpty(),
                                 modifier = Modifier.animateItem()
@@ -188,90 +199,6 @@ fun InventoryListScreen(navController: NavHostController, viewModel: InventoryLi
                 }
             }
         }
-    }
-
-    val purchaseProduct = uiState.purchaseProduct
-    if (purchaseProduct != null) {
-        var quantity by remember(purchaseProduct.id) { mutableStateOf("1") }
-        var unitCostUsd by remember(purchaseProduct.id) { mutableStateOf("") }
-        var exchangeRate by remember(purchaseProduct.id) { mutableStateOf("") }
-        var purchaseDate by remember(purchaseProduct.id) { mutableStateOf(java.time.LocalDate.now().toString()) }
-        var receivedDate by remember(purchaseProduct.id) { mutableStateOf(java.time.LocalDate.now().toString()) }
-        var selectedVariant by remember(purchaseProduct.id) { mutableStateOf<BulbTypeVariant?>(null) }
-        val parsedUsd = unitCostUsd.toDoubleOrNull() ?: 0.0
-        val parsedRate = exchangeRate.toDoubleOrNull() ?: 0.0
-        val canSave = (quantity.toIntOrNull() ?: 0) > 0
-            && parsedUsd > 0
-            && parsedRate > 0
-            && (purchaseProduct.variants.isEmpty() || selectedVariant != null)
-
-        AlertDialog(
-            onDismissRequest = viewModel::dismissPurchaseDialog,
-            title = { Text("Registrar compra") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        "${purchaseProduct.name}. Se guardará el costo histórico de esta compra, aunque llegue semanas después.",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    if (purchaseProduct.variants.isNotEmpty()) {
-                        DropdownSelector(
-                            label = "Variante / socket",
-                            items = purchaseProduct.variants,
-                            selected = selectedVariant,
-                            labelOf = { it.bulbTypeName },
-                            onSelect = { selectedVariant = it },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        OutlinedTextField(
-                            value = quantity,
-                            onValueChange = { quantity = it.filter(Char::isDigit).take(5) },
-                            label = { Text("Piezas") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(1f)
-                        )
-                        OutlinedTextField(
-                            value = unitCostUsd,
-                            onValueChange = { unitCostUsd = it },
-                            label = { Text("USD por foco") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    OutlinedTextField(
-                        value = exchangeRate,
-                        onValueChange = { exchangeRate = it },
-                        label = { Text("Tipo de cambio MXN/USD") },
-                        supportingText = { Text(if (parsedUsd > 0 && parsedRate > 0) "Costo convertido: $${"%.2f".format(parsedUsd * parsedRate)} MXN por foco" else "Ejemplo: 17.25") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        OutlinedTextField(value = purchaseDate, onValueChange = { purchaseDate = it }, label = { Text("Fecha compra") }, supportingText = { Text("AAAA-MM-DD") }, modifier = Modifier.weight(1f))
-                        OutlinedTextField(value = receivedDate, onValueChange = { receivedDate = it }, label = { Text("Fecha recepción") }, supportingText = { Text("AAAA-MM-DD") }, modifier = Modifier.weight(1f))
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        viewModel.registerPurchase(
-                            product = purchaseProduct,
-                            bulbTypeId = selectedVariant?.bulbTypeId,
-                            quantity = quantity.toIntOrNull() ?: 0,
-                            unitCostUsd = parsedUsd,
-                            exchangeRate = parsedRate,
-                            purchaseDate = purchaseDate,
-                            receivedDate = receivedDate
-                        )
-                    },
-                    enabled = canSave
-                ) { Text("Guardar compra") }
-            },
-            dismissButton = { TextButton(onClick = viewModel::dismissPurchaseDialog) { Text("Cancelar") } }
-        )
     }
 }
 

@@ -47,10 +47,33 @@ class AppointmentsRepository @Inject constructor(
         id: Int,
         status: String,
         cancellationReason: String? = null,
-        items: List<InstallationItemSelectionRequest> = emptyList()
+        items: List<InstallationItemSelectionRequest> = emptyList(),
+        itemsAreFinal: Boolean? = null,
+        totalAmount: Double? = null,
+        visitFeeCharged: Double? = null,
+        visitFeeCredit: Double? = null,
+        paymentMethod: String? = null,
+        vehiclePlate: String? = null,
+        vehicleColor: String? = null,
+        technicianNotes: String? = null
     ): Result<AppointmentSummary> {
         val result = safeApiCall {
-            api.updateStatus(id, UpdateAppointmentStatusRequest(status, cancellationReason, items))
+            api.updateStatus(
+                id,
+                UpdateAppointmentStatusRequest(
+                    status = status,
+                    cancellationReason = cancellationReason,
+                    items = items,
+                    itemsAreFinal = itemsAreFinal,
+                    totalAmount = totalAmount,
+                    visitFeeCharged = visitFeeCharged,
+                    visitFeeCredit = visitFeeCredit,
+                    paymentMethod = paymentMethod,
+                    vehiclePlate = vehiclePlate,
+                    vehicleColor = vehicleColor,
+                    technicianNotes = technicianNotes
+                )
+            )
         }
 
         if (result.isSuccess) {

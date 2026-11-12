@@ -13,7 +13,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-val STOCK_ADJUST_REASONS = listOf("Compra", "Ajuste", "Merma", "Devolucion", "Conteo", "Otro")
+// Las compras ya no se capturan aquí: se registran en "Recibir mercancía", que guarda costo y etiquetas.
+val STOCK_ADJUST_REASONS = listOf("Ajuste", "Merma", "Devolucion", "Conteo", "Otro")
 
 data class ProductDetailUiState(
     val isLoading: Boolean = true,

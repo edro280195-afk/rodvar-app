@@ -1,6 +1,7 @@
 package com.rodvarled.admin.ui.appointments
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -28,6 +29,7 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -61,7 +63,13 @@ import com.rodvarled.admin.ui.components.PhoneInputField
 import com.rodvarled.admin.ui.components.RodvarDatePickerDialog
 import com.rodvarled.admin.ui.components.RodvarListRow
 import com.rodvarled.admin.ui.components.RodvarTimePickerDialog
+import com.rodvarled.admin.data.remote.dto.SERVICE_TYPE_INSTALLATION
+import com.rodvarled.admin.data.remote.dto.SERVICE_TYPE_REVISION
+import com.rodvarled.admin.ui.components.MoneyField
+import com.rodvarled.admin.ui.components.ProductPickerSheet
+import com.rodvarled.admin.ui.components.VehicleSearchField
 import com.rodvarled.admin.ui.components.SectionHeader
+import com.rodvarled.admin.ui.components.formatMoney
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,9 +79,9 @@ fun AppointmentFormScreen(
     viewModel: AppointmentFormViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val vehicleSearch by viewModel.vehicleSearcher.state.collectAsState()
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
-    var showVehicleSheet by remember { mutableStateOf(false) }
     var showProductSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(appointmentId) {
@@ -119,27 +127,36 @@ fun AppointmentFormScreen(
                 .padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            SectionHeader("Cliente", modifier = Modifier.padding(top = 8.dp))
+            SectionHeader("Tipo de servicio", modifier = Modifier.padding(top = 8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                FilterChip(
+                    selected = !uiState.isRevision,
+                    onClick = { viewModel.onServiceTypeChange(SERVICE_TYPE_INSTALLATION) },
+                    label = { Text("Instalación") }
+                )
+                FilterChip(
+                    selected = uiState.isRevision,
+                    onClick = { viewModel.onServiceTypeChange(SERVICE_TYPE_REVISION) },
+                    label = { Text("Revisión a domicilio · ${formatMoney(uiState.homeVisitFee)}") }
+                )
+            }
+            if (uiState.isRevision) {
+                MoneyField(
+                    value = uiState.visitFee,
+                    onValueChange = viewModel::onVisitFeeChange,
+                    label = "Costo de la revisión",
+                    supportingText = "Se le avisa al cliente en el itinerario. Pon 0 si no se cobrará.",
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                )
+            }
+
+            SectionHeader("Cliente")
             PhoneInputField(
                 phone = uiState.customerPhone,
                 onPhoneChange = viewModel::onCustomerPhoneChange,
                 label = "Teléfono",
                 modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
             )
-
-            if (uiState.customerSuggestions.isNotEmpty()) {
-                Column(modifier = Modifier.padding(top = 4.dp)) {
-                    uiState.customerSuggestions.take(4).forEach { suggestion ->
-                        RodvarListRow(
-                            onClick = { viewModel.pickCustomerSuggestion(suggestion) },
-                            leading = { IconBadge(Icons.Filled.Person, modifier = Modifier.size(36.dp)) },
-                            headline = { Text(suggestion.name, style = MaterialTheme.typography.bodyMedium) },
-                            supporting = { Text(suggestion.phone, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
-                            showChevron = false
-                        )
-                    }
-                }
-            }
 
             OutlinedTextField(
                 value = uiState.customerName,
@@ -150,16 +167,64 @@ fun AppointmentFormScreen(
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
             )
 
-            DropdownSelector(
-                label = "Origen",
-                items = APPOINTMENT_SOURCES,
-                selected = uiState.source,
-                labelOf = { it },
-                onSelect = viewModel::onSourceChange,
-                modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
-            )
+            if (uiState.customerSuggestions.isNotEmpty()) {
+                Column(modifier = Modifier.padding(top = 4.dp)) {
+                    uiState.customerSuggestions.take(4).forEach { suggestion ->
+                        RodvarListRow(
+                            onClick = { viewModel.pickCustomerSuggestion(suggestion) },
+                            leading = { IconBadge(Icons.Filled.Person, modifier = Modifier.size(36.dp)) },
+                            headline = { Text(suggestion.name, style = MaterialTheme.typography.bodyMedium) },
+                            supporting = {
+                                Text(
+                                    listOfNotNull(suggestion.phone, suggestion.lastVehicleLabel).joinToString(" · "),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
+                            showChevron = false
+                        )
+                    }
+                }
+            }
+
+            SectionHeader("Origen")
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+            ) {
+                APPOINTMENT_SOURCES.forEach { source ->
+                    FilterChip(
+                        selected = uiState.source == source,
+                        onClick = { viewModel.onSourceChange(source) },
+                        label = { Text(source) }
+                    )
+                }
+            }
 
             SectionHeader("Fecha y hora")
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+            ) {
+                val today = java.time.LocalDate.now().toString()
+                val tomorrow = java.time.LocalDate.now().plusDays(1).toString()
+                val dayAfter = java.time.LocalDate.now().plusDays(2).toString()
+                FilterChip(selected = uiState.requestedDate == today, onClick = { viewModel.setDateInDays(0) }, label = { Text("Hoy") })
+                FilterChip(selected = uiState.requestedDate == tomorrow, onClick = { viewModel.setDateInDays(1) }, label = { Text("Mañana") })
+                FilterChip(selected = uiState.requestedDate == dayAfter, onClick = { viewModel.setDateInDays(2) }, label = { Text("Pasado mañana") })
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+            ) {
+                QUICK_APPOINTMENT_HOURS.forEach { hour ->
+                    FilterChip(
+                        selected = uiState.requestedTime.startsWith("%02d:00".format(hour)),
+                        onClick = { viewModel.setHour(hour) },
+                        label = { Text(if (hour < 12) "$hour am" else if (hour == 12) "12 pm" else "${hour - 12} pm") }
+                    )
+                }
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
                 DateTimeTile(
                     icon = Icons.Filled.CalendarMonth,
@@ -227,26 +292,21 @@ fun AppointmentFormScreen(
 
             if (!uiState.isEditMode) {
                 SectionHeader("Vehículo")
-                RodvarListRow(
-                    onClick = { showVehicleSheet = true },
-                    leading = { IconBadge(Icons.Filled.DirectionsCar) },
-                    headline = {
-                        Text(
-                            uiState.selectedTrim?.let { "${uiState.selectedMake?.name} ${uiState.selectedModel?.name} ${uiState.selectedYear?.year} ${it.name}" }
-                                ?: "Sin seleccionar (opcional)",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
+                VehicleSearchField(
+                    state = vehicleSearch,
+                    onQueryChange = viewModel.vehicleSearcher::onQueryChange,
+                    onSelect = viewModel.vehicleSearcher::select,
+                    onClear = viewModel.vehicleSearcher::clear
                 )
 
-                SectionHeader("Productos / servicios")
-                Row(
+                if (!uiState.isRevision) SectionHeader("Productos / servicios")
+                if (!uiState.isRevision) Row(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
                 ) {
                     Text(
-                        if (uiState.selectedProducts.isEmpty()) "Ninguno agregado" else "${uiState.selectedProducts.size} producto(s) · $${"%.2f".format(uiState.total)} MXN",
+                        if (uiState.selectedProducts.isEmpty()) "Ninguno agregado" else "${uiState.selectedProducts.sumOf { it.quantity }} pieza(s) · ${formatMoney(uiState.total)} estimado",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -260,16 +320,20 @@ fun AppointmentFormScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(selected.product.name, style = MaterialTheme.typography.bodyMedium)
-                            Text("$${"%.2f".format(selected.product.price)} c/u", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                listOfNotNull(selected.variant?.bulbTypeName?.takeIf { it.isNotBlank() }, "${formatMoney(selected.unitPrice)} c/u").joinToString(" · "),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
-                        IconButton(onClick = { viewModel.setProductQuantity(selected.product.id, selected.quantity - 1) }, enabled = selected.quantity > 1) {
+                        IconButton(onClick = { viewModel.changeQuantity(selected, selected.quantity - 1) }, enabled = selected.quantity > 1) {
                             Icon(Icons.Filled.Remove, contentDescription = "Restar")
                         }
                         Text(selected.quantity.toString(), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(horizontal = 4.dp))
-                        IconButton(onClick = { viewModel.setProductQuantity(selected.product.id, selected.quantity + 1) }) {
+                        IconButton(onClick = { viewModel.changeQuantity(selected, selected.quantity + 1) }) {
                             Icon(Icons.Filled.Add, contentDescription = "Sumar")
                         }
-                        IconButton(onClick = { viewModel.toggleProduct(selected.product) }) {
+                        IconButton(onClick = { viewModel.removeProduct(selected) }) {
                             Icon(Icons.Filled.Close, contentDescription = "Quitar", modifier = Modifier.size(18.dp))
                         }
                     }
@@ -305,46 +369,15 @@ fun AppointmentFormScreen(
         )
     }
 
-    if (showVehicleSheet) {
-        val sheetState = rememberModalBottomSheetState()
-        ModalBottomSheet(onDismissRequest = { showVehicleSheet = false }, sheetState = sheetState) {
-            Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp)) {
-                Text("Vehículo", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 12.dp))
-                DropdownSelector("Marca", uiState.makes, uiState.selectedMake, { it.name }, onSelect = viewModel::onMakeSelected, modifier = Modifier.fillMaxWidth())
-                DropdownSelector("Modelo", uiState.models, uiState.selectedModel, { it.name }, enabled = uiState.selectedMake != null, onSelect = viewModel::onModelSelected, modifier = Modifier.fillMaxWidth().padding(top = 10.dp))
-                DropdownSelector("Año", uiState.years, uiState.selectedYear, { it.year.toString() }, enabled = uiState.selectedModel != null, onSelect = viewModel::onYearSelected, modifier = Modifier.fillMaxWidth().padding(top = 10.dp))
-                DropdownSelector("Versión", uiState.trims, uiState.selectedTrim, { it.name }, enabled = uiState.selectedYear != null, onSelect = viewModel::onTrimSelected, modifier = Modifier.fillMaxWidth().padding(top = 10.dp))
-                Button(onClick = { showVehicleSheet = false }, modifier = Modifier.fillMaxWidth().padding(top = 20.dp)) { Text("Listo") }
-            }
-        }
-    }
-
     if (showProductSheet) {
-        val sheetState = rememberModalBottomSheetState()
-        ModalBottomSheet(onDismissRequest = { showProductSheet = false }, sheetState = sheetState) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Text("Agregar productos", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
-                LazyColumn(modifier = Modifier.height(420.dp)) {
-                    items(uiState.availableProducts, key = { it.id }) { product ->
-                        val checked = uiState.selectedProducts.any { it.product.id == product.id }
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { viewModel.toggleProduct(product) }
-                                .padding(horizontal = 20.dp, vertical = 10.dp)
-                        ) {
-                            Checkbox(checked = checked, onCheckedChange = { viewModel.toggleProduct(product) })
-                            Column(modifier = Modifier.weight(1f).padding(start = 4.dp)) {
-                                Text(product.name, style = MaterialTheme.typography.bodyMedium)
-                                Text("$${"%.2f".format(product.price)} · stock ${product.stock}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                    }
-                }
-                Button(onClick = { showProductSheet = false }, modifier = Modifier.fillMaxWidth().padding(20.dp)) { Text("Listo") }
-            }
-        }
+        ProductPickerSheet(
+            products = uiState.availableProducts,
+            countOf = { productId, variantId ->
+                uiState.selectedProducts.filter { it.product.id == productId && it.bulbTypeId == variantId }.sumOf { it.quantity }
+            },
+            onPick = viewModel::addProduct,
+            onDismiss = { showProductSheet = false }
+        )
     }
 }
 

@@ -52,6 +52,45 @@ fun Uri.toCompressedBase64(context: Context, quality: Int = 82): String? {
     }.getOrNull()
 }
 
+/**
+ * Lee una imagen desde una Uri, la reduce (lado mayor de `maxDimension`), corrige su orientación y la guarda
+ * como JPEG en `destination`. Devuelve false si no se pudo leer. A diferencia de `toCompressedBase64`, no pasa
+ * por base64: sirve para subir muchas fotos sin duplicarlas en memoria.
+ */
+fun Uri.compressToJpegFile(context: Context, destination: File, maxDimension: Int = 1600, quality: Int = 82): Boolean {
+    return runCatching {
+        val bytes = context.contentResolver.openInputStream(this)?.use { it.readBytes() } ?: return false
+        if (bytes.isEmpty() || bytes.size > MAX_SOURCE_BYTES) return false
+
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return false
+
+        var sampleSize = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / sampleSize > maxDimension) sampleSize *= 2
+
+        val decoded = BitmapFactory.decodeByteArray(
+            bytes,
+            0,
+            bytes.size,
+            BitmapFactory.Options().apply {
+                inSampleSize = sampleSize
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+            }
+        ) ?: return false
+
+        val rotated = fixOrientation(decoded, bytes)
+        try {
+            destination.parentFile?.mkdirs()
+            FileOutputStream(destination).use { rotated.compress(Bitmap.CompressFormat.JPEG, quality, it) }
+            true
+        } finally {
+            if (rotated !== decoded && !rotated.isRecycled) rotated.recycle()
+            if (!decoded.isRecycled) decoded.recycle()
+        }
+    }.getOrDefault(false)
+}
+
 private fun fixOrientation(bitmap: Bitmap, originalBytes: ByteArray): Bitmap {
     return runCatching {
         val exif = ExifInterface(originalBytes.inputStream())

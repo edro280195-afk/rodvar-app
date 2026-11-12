@@ -31,6 +31,11 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -61,6 +66,7 @@ fun ProductFormScreen(
     viewModel: ProductFormViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    var showDetails by remember { mutableStateOf(false) }
 
     LaunchedEffect(productId) { productId?.let { viewModel.loadForEdit(it) } }
     LaunchedEffect(uiState.saved) {
@@ -86,6 +92,52 @@ fun ProductFormScreen(
             modifier = Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Lo básico: con esto alcanza para dar de alta un producto. Lo demás está en "Más detalles".
+            Card(
+                shape = MaterialTheme.shapes.extraLarge,
+                colors = CardDefaults.cardColors(containerColor = RodvarSurface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                modifier = Modifier.fillMaxWidth().border(1.dp, RodvarOutline, MaterialTheme.shapes.extraLarge)
+            ) {
+                Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    SectionHeader("Lo básico")
+
+                    OutlinedTextField(
+                        value = uiState.name, onValueChange = viewModel::onNameChange, label = { Text("Nombre del producto") },
+                        singleLine = true, modifier = Modifier.fillMaxWidth()
+                    )
+
+                    DropdownSelector(
+                        label = "Categoría",
+                        items = uiState.categories,
+                        selected = uiState.selectedCategory,
+                        labelOf = { it.name },
+                        onSelect = viewModel::onCategorySelected,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedTextField(
+                            value = uiState.price, onValueChange = viewModel::onPriceChange, label = { Text("Precio de venta") },
+                            prefix = { Text("$") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = uiState.cost, onValueChange = viewModel::onCostChange, label = { Text("Costo por foco") },
+                            prefix = { Text("$") },
+                            supportingText = { Text("Lo que te cuesta; no se muestra") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+
+            TextButton(onClick = { showDetails = !showDetails }, modifier = Modifier.fillMaxWidth()) {
+                Text(if (showDetails) "Menos detalles ▴" else "Más detalles: foto, garantía, especificaciones, variantes ▾")
+            }
+
+            AnimatedVisibility(visible = showDetails) {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             // Tarjeta 1: Identidad del Producto y Fotografía
             Card(
                 shape = MaterialTheme.shapes.extraLarge,
@@ -106,17 +158,7 @@ fun ProductFormScreen(
                         )
                     }
 
-                    OutlinedTextField(value = uiState.name, onValueChange = viewModel::onNameChange, label = { Text("Nombre del Producto / Kit") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(value = uiState.slug, onValueChange = viewModel::onSlugChange, label = { Text("Slug (Identificador URL)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-
-                    DropdownSelector(
-                        label = "Categoría",
-                        items = uiState.categories,
-                        selected = uiState.selectedCategory,
-                        labelOf = { it.name },
-                        onSelect = viewModel::onCategorySelected,
-                        modifier = Modifier.fillMaxWidth()
-                    )
 
                     OutlinedTextField(value = uiState.description, onValueChange = viewModel::onDescriptionChange, label = { Text("Descripción comercial") }, minLines = 2, modifier = Modifier.fillMaxWidth())
                 }
@@ -130,23 +172,12 @@ fun ProductFormScreen(
                 modifier = Modifier.fillMaxWidth().border(1.dp, RodvarOutline, MaterialTheme.shapes.large)
             ) {
                 Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    SectionHeader("Precios y Garantía")
+                    SectionHeader("Garantía")
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        OutlinedTextField(
-                            value = uiState.price, onValueChange = viewModel::onPriceChange, label = { Text("Precio ($ MXN)") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f)
-                        )
-                        OutlinedTextField(
-                            value = uiState.cost, onValueChange = viewModel::onCostChange, label = { Text("Costo por foco") },
-                            supportingText = { Text("Tu inversión; no se muestra al cliente") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f)
-                        )
-                        OutlinedTextField(
-                            value = uiState.warrantyMonths, onValueChange = viewModel::onWarrantyMonthsChange, label = { Text("Garantía (Meses)") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f)
-                        )
-                    }
+                    OutlinedTextField(
+                        value = uiState.warrantyMonths, onValueChange = viewModel::onWarrantyMonthsChange, label = { Text("Garantía (meses)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
 
@@ -252,6 +283,9 @@ fun ProductFormScreen(
                         Text("Visible para agendar e instalar", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(checked = uiState.isActive, onCheckedChange = viewModel::onActiveChange)
+                }
+            }
+
                 }
             }
 

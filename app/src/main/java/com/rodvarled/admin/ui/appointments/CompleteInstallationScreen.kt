@@ -41,6 +41,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -49,8 +50,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
+import com.rodvarled.admin.ui.components.ChargeLinesEditor
+import com.rodvarled.admin.ui.components.ChargeSummaryCard
 import com.rodvarled.admin.ui.components.DropdownSelector
-import com.rodvarled.admin.ui.components.PhotoCaptureField
+import com.rodvarled.admin.ui.components.ProductPickerSheet
+import com.rodvarled.admin.ui.media.MediaPickerSection
 import com.rodvarled.admin.ui.components.SignaturePad
 import com.rodvarled.admin.ui.components.rememberSignaturePadState
 import com.rodvarled.admin.ui.navigation.Screen
@@ -60,7 +64,10 @@ import com.rodvarled.admin.ui.theme.RodvarPrimaryContainer
 import com.rodvarled.admin.ui.theme.RodvarSurface
 import com.rodvarled.admin.ui.theme.RodvarTextSecondary
 
-private val STEP_TITLES = listOf("Vehículo y Pago", "Evidencia Fotográfica", "Firma y Garantía")
+private val INSTALLATION_STEPS = listOf("Cobro", "Fotos y videos", "Firma y Garantía")
+
+// Una revisión sin productos no lleva garantía: no hay nada que firmar.
+private val VISIT_ONLY_STEPS = listOf("Cobro", "Fotos y videos")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -72,6 +79,11 @@ fun CompleteInstallationScreen(
     val uiState by viewModel.uiState.collectAsState()
     val signatureState = rememberSignaturePadState()
     var step by remember { mutableIntStateOf(0) }
+    var showProductSheet by remember { mutableStateOf(false) }
+    val stepTitles = if (uiState.isVisitOnly) VISIT_ONLY_STEPS else INSTALLATION_STEPS
+    val lastStep = stepTitles.lastIndex
+    // Si al agregar un producto desaparece el paso de firma estando en él, se regresa al último válido.
+    LaunchedEffect(lastStep) { if (step > lastStep) step = lastStep }
     val scannedCodeState = navController.currentBackStackEntry
         ?.savedStateHandle
         ?.getStateFlow<String?>("scannedInventoryUnit", null)
@@ -99,7 +111,7 @@ fun CompleteInstallationScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Completar Instalación", fontWeight = FontWeight.Bold) },
+                title = { Text(if (uiState.isVisitOnly) "Completar Revisión" else "Completar Instalación", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = { if (step == 0) navController.popBackStack() else step-- }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Atrás")
@@ -109,7 +121,29 @@ fun CompleteInstallationScreen(
         }
     ) { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
-            StepProgress(step = step, modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp))
+            if (uiState.isLoading) {
+                Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+                return@Column
+            }
+            if (!uiState.itemsLoaded) {
+                Column(
+                    modifier = Modifier.weight(1f).fillMaxWidth().padding(24.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        uiState.error ?: "No se pudo cargar la cita.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Button(onClick = viewModel::load, modifier = Modifier.padding(top = 16.dp)) { Text("Reintentar") }
+                }
+                return@Column
+            }
+
+            StepProgress(step = step, titles = stepTitles, modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp))
 
             AnimatedContent(
                 targetState = step,
@@ -125,7 +159,7 @@ fun CompleteInstallationScreen(
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     when (currentStep) {
-                        0 -> VehicleAndPaymentStep(uiState, viewModel, navController)
+                        0 -> ChargeStep(uiState, viewModel, navController, onAddProduct = { showProductSheet = true })
                         1 -> PhotosStep(uiState, viewModel)
                         else -> SignatureStep(uiState, signatureState, viewModel)
                     }
@@ -137,7 +171,7 @@ fun CompleteInstallationScreen(
                 if (uiState.error != null) {
                     Text(uiState.error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 8.dp))
                 }
-                if (step < 2) {
+                if (step < lastStep) {
                     Button(
                         onClick = { step++ },
                         shape = MaterialTheme.shapes.large,
@@ -147,25 +181,39 @@ fun CompleteInstallationScreen(
                     }
                 } else {
                     Button(
-                        onClick = { viewModel.submit(signatureState.exportPngBase64()) },
+                        onClick = { viewModel.submit(if (uiState.isVisitOnly) null else signatureState.exportPngBase64()) },
                         enabled = !uiState.isSubmitting,
                         shape = MaterialTheme.shapes.large,
                         modifier = Modifier.fillMaxWidth().height(50.dp)
                     ) {
                         if (uiState.isSubmitting) CircularProgressIndicator(modifier = Modifier.height(20.dp), strokeWidth = 2.dp)
-                        else Text("Completar Instalación y Generar Garantía", fontWeight = FontWeight.Bold)
+                        else Text(
+                            if (uiState.isVisitOnly) "Completar Revisión" else "Completar Instalación y Generar Garantía",
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }
         }
     }
+
+    if (showProductSheet) {
+        ProductPickerSheet(
+            products = uiState.availableProducts,
+            countOf = { productId, variantId ->
+                uiState.charge.lines.filter { it.productId == productId && it.variantId == variantId }.sumOf { it.quantity }
+            },
+            onPick = viewModel::addProduct,
+            onDismiss = { showProductSheet = false }
+        )
+    }
 }
 
 @Composable
-private fun StepProgress(step: Int, modifier: Modifier = Modifier) {
+private fun StepProgress(step: Int, titles: List<String>, modifier: Modifier = Modifier) {
     Column(modifier = modifier) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-            STEP_TITLES.forEachIndexed { index, _ ->
+            titles.forEachIndexed { index, _ ->
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -178,7 +226,7 @@ private fun StepProgress(step: Int, modifier: Modifier = Modifier) {
             }
         }
         Text(
-            "Paso ${step + 1} de 3 · ${STEP_TITLES[step]}",
+            "Paso ${step + 1} de ${titles.size} · ${titles[step]}",
             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
             color = RodvarTextSecondary,
             modifier = Modifier.padding(top = 8.dp)
@@ -187,48 +235,51 @@ private fun StepProgress(step: Int, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun VehicleAndPaymentStep(uiState: CompleteInstallationUiState, viewModel: CompleteInstallationViewModel, navController: NavHostController) {
+private fun ChargeStep(
+    uiState: CompleteInstallationUiState,
+    viewModel: CompleteInstallationViewModel,
+    navController: NavHostController,
+    onAddProduct: () -> Unit
+) {
     Card(
         shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(containerColor = RodvarSurface),
         modifier = Modifier.fillMaxWidth().border(1.dp, RodvarOutline, MaterialTheme.shapes.extraLarge)
     ) {
         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            OutlinedTextField(
-                value = uiState.vehiclePlate,
-                onValueChange = viewModel::onPlateChange,
-                label = { Text("Placas del Vehículo (opcional)") },
-                singleLine = true,
-                shape = MaterialTheme.shapes.medium,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Surface(
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
-                shape = MaterialTheme.shapes.medium,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Text("Control por QR", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        if (uiState.scannedUnits.isEmpty()) "Escanea las cajas que se van a instalar para descontar piezas exactas."
-                        else "${uiState.scannedUnits.size} unidad(es) seleccionada(s): ${uiState.scannedUnits.joinToString { it.code }}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = RodvarTextSecondary,
-                        modifier = Modifier.padding(top = 4.dp)
+                        if (uiState.isVisitOnly) "Revisión a domicilio" else "Lo que se instaló",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                     )
-                    TextButton(onClick = { navController.navigate(Screen.QrScanner.route) }) {
-                        Text("Escanear etiqueta QR")
-                    }
+                    Text(
+                        if (uiState.charge.lines.isEmpty()) "Sin productos"
+                        else "${uiState.charge.lines.sumOf { it.quantity }} pieza(s). Cambia precios o agrega otro par.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = RodvarTextSecondary
+                    )
                 }
+                TextButton(onClick = { navController.navigate(Screen.QrScanner.route) }) { Text("Escanear QR") }
+                TextButton(onClick = onAddProduct) { Text("+ Agregar") }
             }
-            OutlinedTextField(
-                value = uiState.vehicleColor,
-                onValueChange = viewModel::onColorChange,
-                label = { Text("Color del Vehículo (opcional)") },
-                singleLine = true,
-                shape = MaterialTheme.shapes.medium,
-                modifier = Modifier.fillMaxWidth()
+
+            ChargeLinesEditor(
+                lines = uiState.charge.lines,
+                onUnitPriceChange = viewModel::onUnitPriceChange,
+                onQuantityChange = viewModel::onQuantityChange,
+                onRemove = viewModel::removeLine
             )
+
+            ChargeSummaryCard(
+                state = uiState.charge,
+                homeVisitFee = uiState.homeVisitFee,
+                isRevision = uiState.isVisitOnly,
+                onTotalChange = viewModel::onTotalChange,
+                onVisitChargedChange = viewModel::onVisitChargedChange,
+                onVisitCreditChange = viewModel::onVisitCreditChange
+            )
+
             DropdownSelector(
                 label = "Método de Pago",
                 items = PAYMENT_METHODS,
@@ -237,6 +288,25 @@ private fun VehicleAndPaymentStep(uiState: CompleteInstallationUiState, viewMode
                 onSelect = viewModel::onPaymentMethodChange,
                 modifier = Modifier.fillMaxWidth()
             )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = uiState.vehiclePlate,
+                    onValueChange = viewModel::onPlateChange,
+                    label = { Text("Placas (opcional)") },
+                    singleLine = true,
+                    shape = MaterialTheme.shapes.medium,
+                    modifier = Modifier.weight(1f)
+                )
+                OutlinedTextField(
+                    value = uiState.vehicleColor,
+                    onValueChange = viewModel::onColorChange,
+                    label = { Text("Color (opcional)") },
+                    singleLine = true,
+                    shape = MaterialTheme.shapes.medium,
+                    modifier = Modifier.weight(1f)
+                )
+            }
             OutlinedTextField(
                 value = uiState.technicianNotes,
                 onValueChange = viewModel::onNotesChange,
@@ -258,19 +328,21 @@ private fun PhotosStep(uiState: CompleteInstallationUiState, viewModel: Complete
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Text(
-                "Fotos de Evidencia (Antes / Después)",
+                "Fotos y videos del trabajo",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
             )
             Text(
-                "Toma o selecciona fotos para respaldar la calidad de la instalación LED.",
+                "Opcional. Antes, durante y después: todo lo que respalde la calidad de la instalación.",
                 style = MaterialTheme.typography.bodySmall,
                 color = RodvarTextSecondary,
                 modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                PhotoCaptureField(label = "Antes (Original)", base64Value = uiState.beforePhotoBase64, onValueChange = viewModel::onBeforePhotoCaptured)
-                PhotoCaptureField(label = "Después (LED)", base64Value = uiState.afterPhotoBase64, onValueChange = viewModel::onAfterPhotoCaptured)
-            }
+            MediaPickerSection(
+                items = uiState.media,
+                onAdd = viewModel::addMedia,
+                onRemove = viewModel::removeMedia,
+                onStageChange = viewModel::changeMediaStage
+            )
         }
     }
 }

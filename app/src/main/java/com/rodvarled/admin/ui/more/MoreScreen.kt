@@ -14,7 +14,19 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.RateReview
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.rodvarled.admin.ui.components.MoneyField
+import com.rodvarled.admin.ui.components.formatMoney
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -46,13 +58,64 @@ private val moreItems = listOf(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MoreScreen(navController: NavHostController) {
+fun MoreScreen(
+    navController: NavHostController,
+    serviceFeeViewModel: ServiceFeeViewModel = hiltViewModel()
+) {
+    val feeState by serviceFeeViewModel.uiState.collectAsState()
+    var showFeeDialog by remember { mutableStateOf(false) }
+
+    if (showFeeDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!feeState.isSaving) showFeeDialog = false },
+            title = { Text("Tarifa de revisión a domicilio") },
+            text = {
+                MoneyField(
+                    value = feeState.draft,
+                    onValueChange = serviceFeeViewModel::onDraftChange,
+                    label = "Costo de la revisión",
+                    supportingText = feeState.error
+                        ?: "Es el costo cuando no se instala nada. Se avisa en el WhatsApp, el portal del cliente y el sitio web."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { serviceFeeViewModel.save { showFeeDialog = false } },
+                    enabled = !feeState.isSaving
+                ) {
+                    if (feeState.isSaving) CircularProgressIndicator(modifier = Modifier.padding(2.dp), strokeWidth = 2.dp)
+                    else Text("Guardar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showFeeDialog = false }, enabled = !feeState.isSaving) { Text("Cancelar") }
+            }
+        )
+    }
+
     Scaffold(topBar = { TopAppBar(title = { Text("Más Opciones", fontWeight = FontWeight.Bold) }) }) { padding ->
         LazyColumn(
             modifier = Modifier.padding(padding).fillMaxSize(),
             contentPadding = PaddingValues(vertical = 12.dp, horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            item {
+                RodvarListRow(
+                    onClick = {
+                        serviceFeeViewModel.startEditing()
+                        showFeeDialog = true
+                    },
+                    leading = { IconBadge(Icons.Filled.Payments, accent = RodvarPrimary) },
+                    headline = { Text("Tarifa de revisión", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)) },
+                    supporting = {
+                        Text(
+                            if (feeState.isLoading) "Consultando…" else "Hoy: ${formatMoney(feeState.fee)} · se avisa al cliente en WhatsApp, portal y web",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                )
+            }
             items(moreItems) { item ->
                 RodvarListRow(
                     onClick = { navController.navigate(item.screen.route) },

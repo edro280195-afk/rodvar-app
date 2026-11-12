@@ -32,6 +32,9 @@ class CustomersRepository @Inject constructor(
 
     suspend fun search(term: String) = safeApiCall { api.getCustomers(term) }
 
+    /** Autocompletado rápido: hasta 6 clientes con su último vehículo y domicilio. */
+    suspend fun lookup(term: String) = safeApiCall { api.lookup(term) }
+
     suspend fun getCustomer(id: Int) = safeApiCall { api.getCustomer(id) }
 
     suspend fun createCustomer(request: CreateCustomerRequest) = safeApiCall {

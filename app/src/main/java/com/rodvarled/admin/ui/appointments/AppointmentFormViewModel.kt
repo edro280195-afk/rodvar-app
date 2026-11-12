@@ -2,38 +2,49 @@ package com.rodvarled.admin.ui.appointments
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.rodvarled.admin.core.pricing.listPriceFor
 import com.rodvarled.admin.core.util.toUserMessage
+import com.rodvarled.admin.data.remote.dto.BulbTypeVariant
 import com.rodvarled.admin.data.remote.dto.CreateAppointmentRequest
 import com.rodvarled.admin.data.remote.dto.CreateQuoteItemRequest
-import com.rodvarled.admin.data.remote.dto.CustomerListItem
+import com.rodvarled.admin.data.remote.dto.CustomerLookup
+import com.rodvarled.admin.data.remote.dto.DEFAULT_HOME_VISIT_FEE
 import com.rodvarled.admin.data.remote.dto.ProductDetail
+import com.rodvarled.admin.data.remote.dto.SERVICE_TYPE_INSTALLATION
+import com.rodvarled.admin.data.remote.dto.SERVICE_TYPE_REVISION
 import com.rodvarled.admin.data.remote.dto.UpdateAppointmentRequest
-import com.rodvarled.admin.data.remote.dto.VehicleMakeDto
-import com.rodvarled.admin.data.remote.dto.VehicleModelDto
-import com.rodvarled.admin.data.remote.dto.VehicleTrimDto
-import com.rodvarled.admin.data.remote.dto.VehicleYearDto
+import com.rodvarled.admin.data.repository.AddressSuggestion
 import com.rodvarled.admin.data.repository.AppointmentsRepository
 import com.rodvarled.admin.data.repository.CatalogRepository
 import com.rodvarled.admin.data.repository.CustomersRepository
-import com.rodvarled.admin.data.repository.AddressSuggestion
 import com.rodvarled.admin.data.repository.GooglePlacesRepository
+import com.rodvarled.admin.data.repository.SettingsRepository
 import com.rodvarled.admin.data.repository.VehiclesRepository
+import com.rodvarled.admin.ui.components.VehicleSearcher
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 import javax.inject.Inject
 
 val APPOINTMENT_SOURCES = listOf("Web", "WhatsApp", "Facebook", "Llamada", "Recomendación", "Local")
 
+/** Horas más comunes para agendar con un toque. */
+val QUICK_APPOINTMENT_HOURS = listOf(9, 10, 11, 12, 13, 15, 16, 17, 18)
+
+/** Producto elegido para la cita. `bulbTypeId` es el id de la variante (el que usa la API como `productBulbTypeId`). */
 data class SelectedProduct(
     val product: ProductDetail,
     val quantity: Int,
     val bulbTypeId: Int? = null,
     val inventoryUnitCodes: List<String> = emptyList()
-)
+) {
+    val variant: BulbTypeVariant? get() = bulbTypeId?.let { id -> product.variants.firstOrNull { it.id == id } }
+    val unitPrice: Double get() = product.listPriceFor(variant)
+}
 
 data class AppointmentFormUiState(
     val isEditMode: Boolean = false,
@@ -44,8 +55,13 @@ data class AppointmentFormUiState(
 
     val customerName: String = "",
     val customerPhone: String = "",
-    val customerSuggestions: List<CustomerListItem> = emptyList(),
+    val customerSuggestions: List<CustomerLookup> = emptyList(),
     val source: String = "Local",
+    /** "Instalacion" o "Revision" (visita a domicilio sin instalar productos, con costo). */
+    val serviceType: String = SERVICE_TYPE_INSTALLATION,
+    /** Tarifa general vigente de la revisión y la que se acordó para esta cita. */
+    val homeVisitFee: Double = DEFAULT_HOME_VISIT_FEE,
+    val visitFee: Double = DEFAULT_HOME_VISIT_FEE,
     val requestedDate: String = "",
     val requestedTime: String = "",
     val notes: String = "",
@@ -57,39 +73,48 @@ data class AppointmentFormUiState(
     val isAddressSearching: Boolean = false,
     val addressError: String? = null,
 
-    val makes: List<VehicleMakeDto> = emptyList(),
-    val models: List<VehicleModelDto> = emptyList(),
-    val years: List<VehicleYearDto> = emptyList(),
-    val trims: List<VehicleTrimDto> = emptyList(),
-    val selectedMake: VehicleMakeDto? = null,
-    val selectedModel: VehicleModelDto? = null,
-    val selectedYear: VehicleYearDto? = null,
-    val selectedTrim: VehicleTrimDto? = null,
-
     val availableProducts: List<ProductDetail> = emptyList(),
     val selectedProducts: List<SelectedProduct> = emptyList()
 ) {
-    val total: Double get() = selectedProducts.sumOf { it.product.price * it.quantity }
+    val total: Double get() = selectedProducts.sumOf { it.unitPrice * it.quantity }
+    val isRevision: Boolean get() = serviceType == SERVICE_TYPE_REVISION
 }
 
 @HiltViewModel
 class AppointmentFormViewModel @Inject constructor(
     private val appointmentsRepository: AppointmentsRepository,
     private val customersRepository: CustomersRepository,
-    private val vehiclesRepository: VehiclesRepository,
+    vehiclesRepository: VehiclesRepository,
     private val catalogRepository: CatalogRepository,
-    private val googlePlacesRepository: GooglePlacesRepository
+    private val googlePlacesRepository: GooglePlacesRepository,
+    private val settingsRepository: SettingsRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AppointmentFormUiState())
     val uiState = _uiState.asStateFlow()
 
+    /** Búsqueda de vehículo por texto ("civic 2018"). */
+    val vehicleSearcher = VehicleSearcher(viewModelScope, vehiclesRepository)
+
     private var editingId: Int? = null
     private var addressSearchJob: Job? = null
+    private var customerLookupJob: Job? = null
 
     init {
-        loadMakes()
         loadProducts()
+        loadHomeVisitFee()
+    }
+
+    private fun loadHomeVisitFee() {
+        viewModelScope.launch {
+            val fee = settingsRepository.getHomeVisitFee()
+            val state = _uiState.value
+            // Si todavía no se tocó el monto de la revisión, se actualiza a la tarifa vigente.
+            _uiState.value = state.copy(
+                homeVisitFee = fee,
+                visitFee = if (state.visitFee == state.homeVisitFee) fee else state.visitFee
+            )
+        }
     }
 
     fun loadForEdit(id: Int) {
@@ -103,6 +128,8 @@ class AppointmentFormViewModel @Inject constructor(
                         customerName = appt.customerName,
                         customerPhone = appt.customerPhone,
                         source = appt.source,
+                        serviceType = appt.serviceType,
+                        visitFee = appt.visitFeeAmount ?: _uiState.value.homeVisitFee,
                         requestedDate = appt.requestedDate ?: "",
                         requestedTime = appt.requestedTime ?: "",
                         notes = appt.notes ?: "",
@@ -111,14 +138,10 @@ class AppointmentFormViewModel @Inject constructor(
                         serviceLongitude = appt.serviceLongitude,
                         googlePlaceId = appt.googlePlaceId
                     )
+                    // Editar una cita conserva su vehículo: se muestra el que ya tenía.
+                    appt.vehicleTrimId?.let { vehicleSearcher.selectKnown(it, appt.vehicleInfo) }
                 }
                 .onFailure { _uiState.value = _uiState.value.copy(isLoading = false, error = it.toUserMessage()) }
-        }
-    }
-
-    private fun loadMakes() {
-        viewModelScope.launch {
-            vehiclesRepository.getMakes().onSuccess { _uiState.value = _uiState.value.copy(makes = it) }
         }
     }
 
@@ -131,35 +154,83 @@ class AppointmentFormViewModel @Inject constructor(
         viewModelScope.launch { catalogRepository.refresh() }
     }
 
+    // ----- Cliente -----
+
     fun onCustomerNameChange(value: String) {
         _uiState.value = _uiState.value.copy(customerName = value)
+        lookupCustomers(value, minLength = 2)
     }
 
     fun onCustomerPhoneChange(value: String) {
         _uiState.value = _uiState.value.copy(customerPhone = value)
-        if (value.length >= 3) {
-            viewModelScope.launch {
-                customersRepository.search(value).onSuccess {
-                    _uiState.value = _uiState.value.copy(customerSuggestions = it)
-                }
-            }
-        } else {
+        lookupCustomers(value, minLength = 3)
+    }
+
+    private fun lookupCustomers(term: String, minLength: Int) {
+        customerLookupJob?.cancel()
+        if (term.trim().length < minLength) {
             _uiState.value = _uiState.value.copy(customerSuggestions = emptyList())
+            return
+        }
+        customerLookupJob = viewModelScope.launch {
+            delay(250)
+            customersRepository.lookup(term.trim()).onSuccess {
+                _uiState.value = _uiState.value.copy(customerSuggestions = it)
+            }
         }
     }
 
-    fun pickCustomerSuggestion(customer: CustomerListItem) {
-        _uiState.value = _uiState.value.copy(
+    /** Al elegir un cliente conocido se rellenan solos su nombre, teléfono, último vehículo y domicilio. */
+    fun pickCustomerSuggestion(customer: CustomerLookup) {
+        customerLookupJob?.cancel()
+        val state = _uiState.value
+        val fillAddress = state.serviceAddress.isBlank() && !customer.lastServiceAddress.isNullOrBlank()
+
+        _uiState.value = state.copy(
             customerName = customer.name,
             customerPhone = customer.phone,
-            customerSuggestions = emptyList()
+            customerSuggestions = emptyList(),
+            serviceAddress = if (fillAddress) customer.lastServiceAddress!! else state.serviceAddress,
+            serviceLatitude = if (fillAddress) customer.lastServiceLatitude else state.serviceLatitude,
+            serviceLongitude = if (fillAddress) customer.lastServiceLongitude else state.serviceLongitude,
+            googlePlaceId = if (fillAddress) customer.lastGooglePlaceId else state.googlePlaceId
+        )
+
+        if (vehicleSearcher.state.value.selected == null && customer.lastVehicleTrimId != null && !customer.lastVehicleLabel.isNullOrBlank()) {
+            vehicleSearcher.selectKnown(customer.lastVehicleTrimId, customer.lastVehicleLabel)
+        }
+    }
+
+    // ----- Datos de la cita -----
+
+    fun onSourceChange(value: String) { _uiState.value = _uiState.value.copy(source = value) }
+
+    fun onServiceTypeChange(value: String) {
+        val state = _uiState.value
+        if (state.serviceType == value) return
+        // Una revisión no lleva productos: se limpian para que no viajen en la cotización.
+        _uiState.value = state.copy(
+            serviceType = value,
+            visitFee = if (value == SERVICE_TYPE_REVISION) state.homeVisitFee else state.visitFee,
+            selectedProducts = if (value == SERVICE_TYPE_REVISION) emptyList() else state.selectedProducts
         )
     }
 
-    fun onSourceChange(value: String) { _uiState.value = _uiState.value.copy(source = value) }
+    fun onVisitFeeChange(value: Double) { _uiState.value = _uiState.value.copy(visitFee = value) }
     fun onDateChange(value: String) { _uiState.value = _uiState.value.copy(requestedDate = value) }
     fun onTimeChange(value: String) { _uiState.value = _uiState.value.copy(requestedTime = value) }
     fun onNotesChange(value: String) { _uiState.value = _uiState.value.copy(notes = value) }
+
+    /** Hoy (0), mañana (1), pasado mañana (2)… */
+    fun setDateInDays(days: Long) {
+        _uiState.value = _uiState.value.copy(requestedDate = LocalDate.now().plusDays(days).toString())
+    }
+
+    fun setHour(hour: Int) {
+        _uiState.value = _uiState.value.copy(requestedTime = "%02d:00:00".format(hour))
+    }
+
+    // ----- Domicilio -----
 
     fun onServiceAddressChange(value: String) {
         _uiState.value = _uiState.value.copy(
@@ -220,48 +291,35 @@ class AppointmentFormViewModel @Inject constructor(
         }
     }
 
-    fun onMakeSelected(make: VehicleMakeDto) {
-        _uiState.value = _uiState.value.copy(selectedMake = make, models = emptyList(), years = emptyList(), trims = emptyList(), selectedModel = null, selectedYear = null, selectedTrim = null)
-        viewModelScope.launch {
-            vehiclesRepository.getModels(make.id).onSuccess { _uiState.value = _uiState.value.copy(models = it) }
-        }
-    }
+    // ----- Productos -----
 
-    fun onModelSelected(model: VehicleModelDto) {
-        _uiState.value = _uiState.value.copy(selectedModel = model, years = emptyList(), trims = emptyList(), selectedYear = null, selectedTrim = null)
-        viewModelScope.launch {
-            vehiclesRepository.getYears(model.id).onSuccess { _uiState.value = _uiState.value.copy(years = it) }
-        }
-    }
-
-    fun onYearSelected(year: VehicleYearDto) {
-        _uiState.value = _uiState.value.copy(selectedYear = year, trims = emptyList(), selectedTrim = null)
-        viewModelScope.launch {
-            vehiclesRepository.getTrims(year.id).onSuccess { _uiState.value = _uiState.value.copy(trims = it) }
-        }
-    }
-
-    fun onTrimSelected(trim: VehicleTrimDto) {
-        _uiState.value = _uiState.value.copy(selectedTrim = trim)
-    }
-
-    fun toggleProduct(product: ProductDetail) {
-        val current = _uiState.value.selectedProducts
-        val existing = current.find { it.product.id == product.id }
-        _uiState.value = _uiState.value.copy(
-            selectedProducts = if (existing != null) current.filter { it.product.id != product.id }
-            else current + SelectedProduct(product, 1)
-        )
-    }
-
-    fun setProductQuantity(productId: Int, quantity: Int) {
-        if (quantity < 1) return
-        _uiState.value = _uiState.value.copy(
-            selectedProducts = _uiState.value.selectedProducts.map {
-                if (it.product.id == productId) it.copy(quantity = quantity) else it
+    /** Agrega una pieza del producto/variante; si ya estaba en la lista, solo suma. */
+    fun addProduct(product: ProductDetail, variant: BulbTypeVariant?) {
+        val state = _uiState.value
+        val existing = state.selectedProducts.firstOrNull { it.product.id == product.id && it.bulbTypeId == variant?.id }
+        _uiState.value = state.copy(
+            selectedProducts = if (existing != null) {
+                state.selectedProducts.map { if (it === existing) it.copy(quantity = it.quantity + 1) else it }
+            } else {
+                state.selectedProducts + SelectedProduct(product, 1, variant?.id)
             }
         )
     }
+
+    fun changeQuantity(selected: SelectedProduct, quantity: Int) {
+        if (quantity < 1) return
+        _uiState.value = _uiState.value.let { state ->
+            state.copy(selectedProducts = state.selectedProducts.map { if (it === selected) it.copy(quantity = quantity) else it })
+        }
+    }
+
+    fun removeProduct(selected: SelectedProduct) {
+        _uiState.value = _uiState.value.let { state ->
+            state.copy(selectedProducts = state.selectedProducts.filterNot { it === selected })
+        }
+    }
+
+    // ----- Guardar -----
 
     fun save() {
         val state = _uiState.value
@@ -272,8 +330,11 @@ class AppointmentFormViewModel @Inject constructor(
 
         _uiState.value = state.copy(isSaving = true, error = null)
         viewModelScope.launch {
-            val trimId = state.selectedTrim?.id
-            val items = state.selectedProducts.map { CreateQuoteItemRequest(it.product.id, it.quantity) }.takeIf { it.isNotEmpty() }
+            val trimId = vehicleSearcher.selectedTrimId
+            val items = state.selectedProducts
+                .map { CreateQuoteItemRequest(it.product.id, it.quantity, it.bulbTypeId) }
+                .takeIf { it.isNotEmpty() && !state.isRevision }
+            val visitFeeAmount = if (state.isRevision) state.visitFee else null
 
             val result = if (editingId != null) {
                 appointmentsRepository.updateAppointment(
@@ -290,6 +351,8 @@ class AppointmentFormViewModel @Inject constructor(
                         serviceLongitude = state.serviceLongitude,
                         googlePlaceId = state.googlePlaceId,
                         vehicleTrimId = trimId,
+                        serviceType = state.serviceType,
+                        visitFeeAmount = visitFeeAmount,
                         status = "Pendiente"
                     )
                 )
@@ -307,6 +370,8 @@ class AppointmentFormViewModel @Inject constructor(
                         serviceLongitude = state.serviceLongitude,
                         googlePlaceId = state.googlePlaceId,
                         vehicleTrimId = trimId,
+                        serviceType = state.serviceType,
+                        visitFeeAmount = visitFeeAmount,
                         items = items
                     )
                 )
