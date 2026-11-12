@@ -28,8 +28,14 @@ data class InventoryListUiState(
     val selectedCategoryId: Int? = null,
     val onlyLowStock: Boolean = false,
     val query: String = "",
-    val error: String? = null
-)
+    val snackbarMessage: String? = null,
+    val error: String? = null,
+    val purchaseProduct: ProductDetail? = null
+) {
+    val totalProductsCount: Int get() = all.size
+    val totalStockUnits: Int get() = all.sumOf { it.effectiveStock() }
+    val lowStockCount: Int get() = all.count { it.isLowStock() }
+}
 
 @HiltViewModel
 class InventoryListViewModel @Inject constructor(
@@ -70,6 +76,72 @@ class InventoryListViewModel @Inject constructor(
     fun toggleLowStockOnly() {
         val newValue = !_uiState.value.onlyLowStock
         _uiState.value = _uiState.value.copy(onlyLowStock = newValue, filtered = applyFilters(_uiState.value.all, onlyLowStock = newValue))
+    }
+
+    fun adjustStock(product: ProductDetail, delta: Int) {
+        val currentStock = product.effectiveStock()
+        if (currentStock + delta < 0) return
+
+        if (delta > 0) {
+            _uiState.value = _uiState.value.copy(purchaseProduct = product, error = null)
+            return
+        }
+
+        viewModelScope.launch {
+            repository.adjustStock(
+                productId = product.id,
+                bulbTypeId = null,
+                delta = delta,
+                reason = "Ajuste",
+                note = "Ajuste rápido desde catálogo"
+            ).onSuccess {
+                _uiState.value = _uiState.value.copy(snackbarMessage = "Stock de '${product.name}' actualizado")
+            }.onFailure { err ->
+                _uiState.value = _uiState.value.copy(error = err.toUserMessage())
+            }
+        }
+    }
+
+    fun dismissPurchaseDialog() {
+        _uiState.value = _uiState.value.copy(purchaseProduct = null)
+    }
+
+    fun registerPurchase(
+        product: ProductDetail,
+        bulbTypeId: Int?,
+        quantity: Int,
+        unitCostUsd: Double,
+        exchangeRate: Double,
+        purchaseDate: String,
+        receivedDate: String
+    ) {
+        if (quantity <= 0 || unitCostUsd <= 0 || exchangeRate <= 0) {
+            _uiState.value = _uiState.value.copy(error = "Captura cantidad, costo en USD y tipo de cambio válidos.")
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(purchaseProduct = null, isLoading = true, error = null)
+            repository.adjustStock(
+                productId = product.id,
+                bulbTypeId = bulbTypeId,
+                delta = quantity,
+                reason = "Compra",
+                note = "Compra registrada con costo histórico en USD",
+                unitCostUsd = unitCostUsd,
+                exchangeRate = exchangeRate,
+                purchaseDate = purchaseDate.ifBlank { null },
+                receivedDate = receivedDate.ifBlank { null }
+            ).onSuccess {
+                _uiState.value = _uiState.value.copy(isLoading = false, snackbarMessage = "Compra registrada: $quantity pieza(s) a $${"%.2f".format(unitCostUsd)} USD.")
+            }.onFailure { err ->
+                _uiState.value = _uiState.value.copy(isLoading = false, error = err.toUserMessage())
+            }
+        }
+    }
+
+    fun consumeSnackbar() {
+        _uiState.value = _uiState.value.copy(snackbarMessage = null)
     }
 
     private fun applyFilters(

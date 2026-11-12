@@ -42,7 +42,35 @@ data class WarrantyDetail(
     val notes: String? = null,
     val installationId: Int,
     val vehicleInfo: String = "No especificado",
-    val items: List<WarrantyItem> = emptyList()
+    val items: List<WarrantyItem> = emptyList(),
+    val claims: List<WarrantyClaim> = emptyList()
+)
+
+@Serializable
+data class WarrantyClaim(
+    val id: Int,
+    val folio: String,
+    val reason: String,
+    val status: String,
+    val resolution: String? = null,
+    val productName: String? = null,
+    val quantity: Int = 1,
+    val productCost: Double? = null,
+    val laborCost: Double? = null,
+    val totalCost: Double? = null,
+    val createdAt: String? = null,
+    val resolvedAt: String? = null
+)
+
+@Serializable
+data class CreateWarrantyClaimRequest(
+    val reason: String,
+    val resolution: String? = null,
+    val status: String = "Aplicada",
+    val productId: Int? = null,
+    val productBulbTypeId: Int? = null,
+    val quantity: Int = 1,
+    val laborCost: Double = 0.0
 )
 
 @Serializable

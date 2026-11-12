@@ -11,4 +11,7 @@ interface NotificationsApi {
 
     @DELETE("api/Notifications/unregister-device")
     suspend fun unregisterDevice(@Body request: RegisterDeviceRequest)
+
+    @POST("api/Notifications/test-fcm")
+    suspend fun testFcmNotification()
 }

@@ -18,6 +18,7 @@ sealed class Screen(val route: String) {
     }
 
     object DirectInstallation : Screen("installations/direct")
+    object QrScanner : Screen("inventory/scanner")
 
     object WarrantiesList : Screen("warranties")
     object WarrantyDetail : Screen("warranties/{id}") {
@@ -32,6 +33,12 @@ sealed class Screen(val route: String) {
     object InventoryList : Screen("inventory")
     object ProductDetail : Screen("inventory/{id}") {
         fun of(id: Int) = "inventory/$id"
+    }
+    object InventoryLabels : Screen("inventory/{id}/labels") {
+        fun of(id: Int) = "inventory/$id/labels"
+    }
+    object Pricing : Screen("inventory/{id}/pricing") {
+        fun of(id: Int) = "inventory/$id/pricing"
     }
     object ProductForm : Screen("inventory/form?id={id}") {
         fun create() = "inventory/form"
@@ -48,4 +55,5 @@ sealed class Screen(val route: String) {
     object Reviews : Screen("reviews")
     object Gallery : Screen("gallery")
     object Profile : Screen("profile")
+    object Reports : Screen("reports")
 }

@@ -11,6 +11,9 @@ import com.rodvarled.admin.data.remote.api.CustomersApi
 import com.rodvarled.admin.data.remote.api.GalleryApi
 import com.rodvarled.admin.data.remote.api.InstallationsApi
 import com.rodvarled.admin.data.remote.api.NotificationsApi
+import com.rodvarled.admin.data.remote.api.PricingApi
+import com.rodvarled.admin.data.remote.api.ReportsApi
+import com.rodvarled.admin.data.remote.api.InventoryApi
 import com.rodvarled.admin.data.remote.api.QuotesApi
 import com.rodvarled.admin.data.remote.api.ReviewsApi
 import com.rodvarled.admin.data.remote.api.VehiclesApi
@@ -45,7 +48,9 @@ object NetworkModule {
     @Singleton
     fun provideLoggingInterceptor(): HttpLoggingInterceptor =
         HttpLoggingInterceptor().apply {
-            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY else HttpLoggingInterceptor.Level.NONE
+            // Nunca registrar cuerpos completos: las fotos y firmas viajan como base64 y
+            // duplicarlas en Logcat puede disparar el consumo de memoria del proceso.
+            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.HEADERS else HttpLoggingInterceptor.Level.NONE
         }
 
     @Provides
@@ -55,8 +60,9 @@ object NetworkModule {
         OkHttpClient.Builder()
             .addInterceptor(logging)
             .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .writeTimeout(60, TimeUnit.SECONDS)
+            .readTimeout(120, TimeUnit.SECONDS)
+            .writeTimeout(120, TimeUnit.SECONDS)
+            .callTimeout(150, TimeUnit.SECONDS)
             .build()
 
     @Provides
@@ -72,8 +78,9 @@ object NetworkModule {
             .addInterceptor(logging)
             .authenticator(authenticator)
             .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .writeTimeout(60, TimeUnit.SECONDS)
+            .readTimeout(120, TimeUnit.SECONDS)
+            .writeTimeout(120, TimeUnit.SECONDS)
+            .callTimeout(150, TimeUnit.SECONDS)
             .build()
 
     @Provides
@@ -146,4 +153,16 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideNotificationsApi(@AuthenticatedClient retrofit: Retrofit): NotificationsApi = retrofit.create(NotificationsApi::class.java)
+
+    @Provides
+    @Singleton
+    fun providePricingApi(@AuthenticatedClient retrofit: Retrofit): PricingApi = retrofit.create(PricingApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideReportsApi(@AuthenticatedClient retrofit: Retrofit): ReportsApi = retrofit.create(ReportsApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideInventoryApi(@AuthenticatedClient retrofit: Retrofit): InventoryApi = retrofit.create(InventoryApi::class.java)
 }

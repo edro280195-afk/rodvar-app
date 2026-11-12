@@ -4,9 +4,14 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class InstallationItemDto(
+    val productId: Int = 0,
+    val productBulbTypeId: Int? = null,
     val productName: String,
     val quantity: Int,
-    val unitPrice: Double
+    val listUnitPrice: Double = 0.0,
+    val unitPrice: Double,
+    val discountAmount: Double = 0.0,
+    val priceRuleName: String? = null
 )
 
 @Serializable

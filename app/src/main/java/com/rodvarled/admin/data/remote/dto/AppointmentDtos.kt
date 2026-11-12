@@ -12,6 +12,10 @@ data class AppointmentSummary(
     val status: String,
     val source: String,
     val notes: String? = null,
+    val serviceAddress: String? = null,
+    val serviceLatitude: Double? = null,
+    val serviceLongitude: Double? = null,
+    val googlePlaceId: String? = null,
     val vehicleInfo: String = "No especificado",
     val createdAt: String? = null,
     val durationMinutes: Int? = null,
@@ -27,7 +31,9 @@ data class AppointmentSummary(
 @Serializable
 data class CreateQuoteItemRequest(
     val productId: Int,
-    val quantity: Int
+    val quantity: Int,
+    val productBulbTypeId: Int? = null,
+    val inventoryUnitCodes: List<String> = emptyList()
 )
 
 @Serializable
@@ -38,6 +44,10 @@ data class CreateAppointmentRequest(
     val requestedDate: String? = null,
     val requestedTime: String? = null,
     val notes: String? = null,
+    val serviceAddress: String? = null,
+    val serviceLatitude: Double? = null,
+    val serviceLongitude: Double? = null,
+    val googlePlaceId: String? = null,
     val vehicleTrimId: Int? = null,
     val items: List<CreateQuoteItemRequest>? = null
 )
@@ -50,6 +60,10 @@ data class UpdateAppointmentRequest(
     val requestedDate: String? = null,
     val requestedTime: String? = null,
     val notes: String? = null,
+    val serviceAddress: String? = null,
+    val serviceLatitude: Double? = null,
+    val serviceLongitude: Double? = null,
+    val googlePlaceId: String? = null,
     val vehicleTrimId: Int? = null,
     val status: String
 )
@@ -57,7 +71,15 @@ data class UpdateAppointmentRequest(
 @Serializable
 data class UpdateAppointmentStatusRequest(
     val status: String,
-    val cancellationReason: String? = null
+    val cancellationReason: String? = null,
+    val items: List<InstallationItemSelectionRequest> = emptyList()
+)
+
+@Serializable
+data class InstallationItemSelectionRequest(
+    val productId: Int,
+    val productBulbTypeId: Int? = null,
+    val inventoryUnitCodes: List<String> = emptyList()
 )
 
 @Serializable

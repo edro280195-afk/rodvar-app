@@ -23,12 +23,16 @@ import com.rodvarled.admin.ui.gallery.GalleryScreen
 import com.rodvarled.admin.ui.installations.DirectInstallationScreen
 import com.rodvarled.admin.ui.inventory.InventoryListScreen
 import com.rodvarled.admin.ui.inventory.ProductDetailScreen
+import com.rodvarled.admin.ui.inventory.PricingScreen
 import com.rodvarled.admin.ui.inventory.ProductFormScreen
+import com.rodvarled.admin.ui.inventory.InventoryLabelsScreen
 import com.rodvarled.admin.ui.more.MoreScreen
 import com.rodvarled.admin.ui.profile.ProfileScreen
 import com.rodvarled.admin.ui.quotes.QuoteDetailScreen
 import com.rodvarled.admin.ui.quotes.QuotesListScreen
 import com.rodvarled.admin.ui.reviews.ReviewsScreen
+import com.rodvarled.admin.ui.reports.ReportsScreen
+import com.rodvarled.admin.ui.scanner.QrScannerScreen
 import com.rodvarled.admin.ui.warranties.WarrantyDetailScreen
 import com.rodvarled.admin.ui.warranties.WarrantiesListScreen
 
@@ -74,6 +78,9 @@ fun RodvarNavHost(navController: NavHostController, modifier: Modifier = Modifie
         composable(Screen.DirectInstallation.route) {
             DirectInstallationScreen(navController = navController)
         }
+        composable(Screen.QrScanner.route) {
+            QrScannerScreen(navController = navController)
+        }
 
         composable(Screen.WarrantiesList.route) {
             WarrantiesListScreen(navController = navController)
@@ -114,6 +121,18 @@ fun RodvarNavHost(navController: NavHostController, modifier: Modifier = Modifie
             val id = backStackEntry.arguments?.getInt("id")?.takeIf { it > 0 }
             ProductFormScreen(productId = id, navController = navController)
         }
+        composable(
+            Screen.InventoryLabels.route,
+            arguments = listOf(navArgument("id") { type = NavType.IntType })
+        ) {
+            InventoryLabelsScreen(navController = navController)
+        }
+        composable(
+            Screen.Pricing.route,
+            arguments = listOf(navArgument("id") { type = NavType.IntType })
+        ) {
+            PricingScreen(navController = navController)
+        }
 
         composable(Screen.QuotesList.route) {
             QuotesListScreen(navController = navController)
@@ -140,6 +159,9 @@ fun RodvarNavHost(navController: NavHostController, modifier: Modifier = Modifie
         }
         composable(Screen.Profile.route) {
             ProfileScreen(navController = navController)
+        }
+        composable(Screen.Reports.route) {
+            ReportsScreen(navController = navController)
         }
     }
 }

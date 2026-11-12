@@ -15,16 +15,25 @@ import com.rodvarled.admin.data.remote.dto.VehicleYearDto
 import com.rodvarled.admin.data.repository.AppointmentsRepository
 import com.rodvarled.admin.data.repository.CatalogRepository
 import com.rodvarled.admin.data.repository.CustomersRepository
+import com.rodvarled.admin.data.repository.AddressSuggestion
+import com.rodvarled.admin.data.repository.GooglePlacesRepository
 import com.rodvarled.admin.data.repository.VehiclesRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 val APPOINTMENT_SOURCES = listOf("Web", "WhatsApp", "Facebook", "Llamada", "Recomendación", "Local")
 
-data class SelectedProduct(val product: ProductDetail, val quantity: Int)
+data class SelectedProduct(
+    val product: ProductDetail,
+    val quantity: Int,
+    val bulbTypeId: Int? = null,
+    val inventoryUnitCodes: List<String> = emptyList()
+)
 
 data class AppointmentFormUiState(
     val isEditMode: Boolean = false,
@@ -40,6 +49,13 @@ data class AppointmentFormUiState(
     val requestedDate: String = "",
     val requestedTime: String = "",
     val notes: String = "",
+    val serviceAddress: String = "",
+    val serviceLatitude: Double? = null,
+    val serviceLongitude: Double? = null,
+    val googlePlaceId: String? = null,
+    val addressSuggestions: List<AddressSuggestion> = emptyList(),
+    val isAddressSearching: Boolean = false,
+    val addressError: String? = null,
 
     val makes: List<VehicleMakeDto> = emptyList(),
     val models: List<VehicleModelDto> = emptyList(),
@@ -61,13 +77,15 @@ class AppointmentFormViewModel @Inject constructor(
     private val appointmentsRepository: AppointmentsRepository,
     private val customersRepository: CustomersRepository,
     private val vehiclesRepository: VehiclesRepository,
-    private val catalogRepository: CatalogRepository
+    private val catalogRepository: CatalogRepository,
+    private val googlePlacesRepository: GooglePlacesRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AppointmentFormUiState())
     val uiState = _uiState.asStateFlow()
 
     private var editingId: Int? = null
+    private var addressSearchJob: Job? = null
 
     init {
         loadMakes()
@@ -87,7 +105,11 @@ class AppointmentFormViewModel @Inject constructor(
                         source = appt.source,
                         requestedDate = appt.requestedDate ?: "",
                         requestedTime = appt.requestedTime ?: "",
-                        notes = appt.notes ?: ""
+                        notes = appt.notes ?: "",
+                        serviceAddress = appt.serviceAddress ?: "",
+                        serviceLatitude = appt.serviceLatitude,
+                        serviceLongitude = appt.serviceLongitude,
+                        googlePlaceId = appt.googlePlaceId
                     )
                 }
                 .onFailure { _uiState.value = _uiState.value.copy(isLoading = false, error = it.toUserMessage()) }
@@ -138,6 +160,65 @@ class AppointmentFormViewModel @Inject constructor(
     fun onDateChange(value: String) { _uiState.value = _uiState.value.copy(requestedDate = value) }
     fun onTimeChange(value: String) { _uiState.value = _uiState.value.copy(requestedTime = value) }
     fun onNotesChange(value: String) { _uiState.value = _uiState.value.copy(notes = value) }
+
+    fun onServiceAddressChange(value: String) {
+        _uiState.value = _uiState.value.copy(
+            serviceAddress = value,
+            serviceLatitude = null,
+            serviceLongitude = null,
+            googlePlaceId = null,
+            addressSuggestions = emptyList(),
+            addressError = null
+        )
+        addressSearchJob?.cancel()
+        if (value.trim().length < 3) return
+
+        addressSearchJob = viewModelScope.launch {
+            delay(300)
+            _uiState.value = _uiState.value.copy(isAddressSearching = true)
+            runCatching { googlePlacesRepository.search(value) }
+                .onSuccess { suggestions ->
+                    _uiState.value = _uiState.value.copy(
+                        addressSuggestions = suggestions,
+                        isAddressSearching = false
+                    )
+                }
+                .onFailure { exception ->
+                    _uiState.value = _uiState.value.copy(
+                        addressSuggestions = emptyList(),
+                        isAddressSearching = false,
+                        addressError = exception.toUserMessage()
+                    )
+                }
+        }
+    }
+
+    fun selectAddress(suggestion: AddressSuggestion) {
+        addressSearchJob?.cancel()
+        _uiState.value = _uiState.value.copy(
+            isAddressSearching = true,
+            addressSuggestions = emptyList(),
+            addressError = null
+        )
+        viewModelScope.launch {
+            runCatching { googlePlacesRepository.getAddress(suggestion.placeId) }
+                .onSuccess { address ->
+                    _uiState.value = _uiState.value.copy(
+                        serviceAddress = address.address.ifBlank { suggestion.fullText },
+                        serviceLatitude = address.latitude,
+                        serviceLongitude = address.longitude,
+                        googlePlaceId = address.placeId,
+                        isAddressSearching = false
+                    )
+                }
+                .onFailure { exception ->
+                    _uiState.value = _uiState.value.copy(
+                        isAddressSearching = false,
+                        addressError = exception.toUserMessage()
+                    )
+                }
+        }
+    }
 
     fun onMakeSelected(make: VehicleMakeDto) {
         _uiState.value = _uiState.value.copy(selectedMake = make, models = emptyList(), years = emptyList(), trims = emptyList(), selectedModel = null, selectedYear = null, selectedTrim = null)
@@ -204,6 +285,10 @@ class AppointmentFormViewModel @Inject constructor(
                         requestedDate = state.requestedDate.ifBlank { null },
                         requestedTime = state.requestedTime.ifBlank { null },
                         notes = state.notes.ifBlank { null },
+                        serviceAddress = state.serviceAddress.ifBlank { null },
+                        serviceLatitude = state.serviceLatitude,
+                        serviceLongitude = state.serviceLongitude,
+                        googlePlaceId = state.googlePlaceId,
                         vehicleTrimId = trimId,
                         status = "Pendiente"
                     )
@@ -217,6 +302,10 @@ class AppointmentFormViewModel @Inject constructor(
                         requestedDate = state.requestedDate.ifBlank { null },
                         requestedTime = state.requestedTime.ifBlank { null },
                         notes = state.notes.ifBlank { null },
+                        serviceAddress = state.serviceAddress.ifBlank { null },
+                        serviceLatitude = state.serviceLatitude,
+                        serviceLongitude = state.serviceLongitude,
+                        googlePlaceId = state.googlePlaceId,
                         vehicleTrimId = trimId,
                         items = items
                     )

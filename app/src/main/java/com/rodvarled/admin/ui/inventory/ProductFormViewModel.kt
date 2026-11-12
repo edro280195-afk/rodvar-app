@@ -20,6 +20,7 @@ data class ProductVariantForm(
     val bulbTypeName: String,
     val stock: String = "0",
     val priceOverride: String = "",
+    val costOverride: String = "",
     val lowStockThreshold: String = ""
 )
 
@@ -40,6 +41,7 @@ data class ProductFormUiState(
     val slugManuallyEdited: Boolean = false,
     val description: String = "",
     val price: String = "",
+    val cost: String = "",
     val warrantyMonths: String = "12",
     val lumens: String = "",
     val colorTemperature: String = "",
@@ -47,6 +49,7 @@ data class ProductFormUiState(
     val voltageRange: String = "9V - 32V",
     val coolingSystem: String = "",
     val mainImageUrl: String? = null,
+    val bulbTypeId: Int? = null,
     val stock: String = "0",
     val lowStockThreshold: String = "",
     val isActive: Boolean = true,
@@ -80,6 +83,7 @@ class ProductFormViewModel @Inject constructor(
                         slugManuallyEdited = true,
                         description = p.description ?: "",
                         price = p.price.toString(),
+                        cost = p.cost.toString(),
                         warrantyMonths = p.warrantyMonths.toString(),
                         lumens = p.lumens?.toString() ?: "",
                         colorTemperature = p.colorTemperature?.toString() ?: "",
@@ -87,11 +91,13 @@ class ProductFormViewModel @Inject constructor(
                         voltageRange = p.voltageRange ?: "",
                         coolingSystem = p.coolingSystem ?: "",
                         mainImageUrl = p.mainImageUrl,
+                        bulbTypeId = p.bulbTypeId,
                         stock = p.stock.toString(),
                         lowStockThreshold = p.lowStockThreshold?.toString() ?: "",
+                        isActive = p.isActive,
                         selectedCategory = _uiState.value.categories.find { it.id == p.categoryId },
                         variants = p.variants.map {
-                            ProductVariantForm(it.bulbTypeId, it.bulbTypeName, it.stock.toString(), it.priceOverride?.toString() ?: "", it.lowStockThreshold?.toString() ?: "")
+                            ProductVariantForm(it.bulbTypeId, it.bulbTypeName, it.stock.toString(), it.priceOverride?.toString() ?: "", it.costOverride?.toString() ?: "", it.lowStockThreshold?.toString() ?: "")
                         }
                     )
                 }
@@ -107,6 +113,7 @@ class ProductFormViewModel @Inject constructor(
     fun onSlugChange(value: String) { _uiState.value = _uiState.value.copy(slug = value, slugManuallyEdited = true) }
     fun onDescriptionChange(value: String) { _uiState.value = _uiState.value.copy(description = value) }
     fun onPriceChange(value: String) { _uiState.value = _uiState.value.copy(price = value) }
+    fun onCostChange(value: String) { _uiState.value = _uiState.value.copy(cost = value) }
     fun onWarrantyMonthsChange(value: String) { _uiState.value = _uiState.value.copy(warrantyMonths = value) }
     fun onLumensChange(value: String) { _uiState.value = _uiState.value.copy(lumens = value) }
     fun onColorTemperatureChange(value: String) { _uiState.value = _uiState.value.copy(colorTemperature = value) }
@@ -135,6 +142,10 @@ class ProductFormViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(variants = _uiState.value.variants.map { if (it.bulbTypeId == bulbTypeId) it.copy(lowStockThreshold = value) else it })
     }
 
+    fun updateVariantCost(bulbTypeId: Int, value: String) {
+        _uiState.value = _uiState.value.copy(variants = _uiState.value.variants.map { if (it.bulbTypeId == bulbTypeId) it.copy(costOverride = value) else it })
+    }
+
     fun uploadImage(base64: String) {
         val productId = _uiState.value.productId
         if (productId == null) {
@@ -152,8 +163,8 @@ class ProductFormViewModel @Inject constructor(
 
     fun save() {
         val state = _uiState.value
-        if (state.name.isBlank() || state.selectedCategory == null || state.price.toDoubleOrNull() == null) {
-            _uiState.value = state.copy(error = "Completa nombre, categoría y precio.")
+        if (state.name.isBlank() || state.selectedCategory == null || state.price.toDoubleOrNull() == null || state.cost.toDoubleOrNull() == null) {
+            _uiState.value = state.copy(error = "Completa nombre, categoría, precio y costo por foco.")
             return
         }
 
@@ -161,11 +172,12 @@ class ProductFormViewModel @Inject constructor(
 
         val request = ProductSaveRequest(
             categoryId = state.selectedCategory.id,
-            bulbTypeId = null,
+            bulbTypeId = state.bulbTypeId,
             name = state.name,
             slug = state.slug.ifBlank { slugify(state.name) },
             description = state.description.ifBlank { null },
             price = state.price.toDoubleOrNull() ?: 0.0,
+            cost = state.cost.toDoubleOrNull() ?: 0.0,
             warrantyMonths = state.warrantyMonths.toIntOrNull() ?: 12,
             lumens = state.lumens.toIntOrNull(),
             colorTemperature = state.colorTemperature.toIntOrNull(),
@@ -177,8 +189,8 @@ class ProductFormViewModel @Inject constructor(
             stock = state.stock.toIntOrNull() ?: 0,
             lowStockThreshold = state.lowStockThreshold.toIntOrNull(),
             variants = state.variants.map {
-                BulbTypeVariantSaveRequest(it.bulbTypeId, it.stock.toIntOrNull() ?: 0, it.priceOverride.toDoubleOrNull(), it.lowStockThreshold.toIntOrNull())
-            }.takeIf { it.isNotEmpty() }
+                BulbTypeVariantSaveRequest(it.bulbTypeId, it.stock.toIntOrNull() ?: 0, it.priceOverride.toDoubleOrNull(), it.costOverride.toDoubleOrNull(), it.lowStockThreshold.toIntOrNull())
+            }
         )
 
         viewModelScope.launch {

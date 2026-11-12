@@ -4,25 +4,25 @@ import androidx.compose.ui.graphics.Color
 import com.rodvarled.admin.ui.components.StatusStyle
 
 fun appointmentStatusStyle(status: String): StatusStyle = when (status) {
-    "Pendiente" -> StatusStyle(Color(0xFF78350F), Color(0xFFFDE68A))
-    "Confirmada" -> StatusStyle(Color(0xFF1E3A8A), Color(0xFFBFDBFE))
-    "Instalada" -> StatusStyle(Color(0xFF064E3B), Color(0xFF6EE7B7))
-    "Cancelada" -> StatusStyle(Color(0xFF7F1D1D), Color(0xFFFCA5A5))
-    else -> StatusStyle(Color(0xFF374151), Color(0xFFE5E7EB))
+    "Pendiente" -> StatusStyle(Color(0xFFB45309), Color(0xFFFFFBEB))
+    "Confirmada" -> StatusStyle(Color(0xFF1E40AF), Color(0xFFEFF6FF))
+    "Instalada" -> StatusStyle(Color(0xFF047857), Color(0xFFECFDF5))
+    "Cancelada" -> StatusStyle(Color(0xFFB91C1C), Color(0xFFFEF2F2))
+    else -> StatusStyle(Color(0xFF475569), Color(0xFFF1F5F9))
 }
 
 fun quoteStatusStyle(status: String): StatusStyle = when (status) {
-    "Draft", "Borrador de Cita" -> StatusStyle(Color(0xFF374151), Color(0xFFE5E7EB))
-    "Pendiente" -> StatusStyle(Color(0xFF78350F), Color(0xFFFDE68A))
-    "Agendado" -> StatusStyle(Color(0xFF1E3A8A), Color(0xFFBFDBFE))
-    "Instalado" -> StatusStyle(Color(0xFF064E3B), Color(0xFF6EE7B7))
-    "Cancelado" -> StatusStyle(Color(0xFF7F1D1D), Color(0xFFFCA5A5))
-    else -> StatusStyle(Color(0xFF374151), Color(0xFFE5E7EB))
+    "Draft", "Borrador de Cita" -> StatusStyle(Color(0xFF475569), Color(0xFFF1F5F9))
+    "Pendiente" -> StatusStyle(Color(0xFFB45309), Color(0xFFFFFBEB))
+    "Agendado" -> StatusStyle(Color(0xFF1E40AF), Color(0xFFEFF6FF))
+    "Instalado" -> StatusStyle(Color(0xFF047857), Color(0xFFECFDF5))
+    "Cancelado" -> StatusStyle(Color(0xFFB91C1C), Color(0xFFFEF2F2))
+    else -> StatusStyle(Color(0xFF475569), Color(0xFFF1F5F9))
 }
 
-/** Unifica el tri-estado de garantías (antes duplicado en la lista y en el detalle). */
+/** Unifica el tri-estado de garantías. */
 fun warrantyStatusStyle(isActive: Boolean, isSigned: Boolean): StatusStyle = when {
-    !isActive -> StatusStyle(Color(0xFF374151), Color(0xFFE5E7EB))
-    isSigned -> StatusStyle(Color(0xFF064E3B), Color(0xFF6EE7B7))
-    else -> StatusStyle(Color(0xFF78350F), Color(0xFFFDE68A))
+    !isActive -> StatusStyle(Color(0xFF475569), Color(0xFFF1F5F9))
+    isSigned -> StatusStyle(Color(0xFF047857), Color(0xFFECFDF5))
+    else -> StatusStyle(Color(0xFFB45309), Color(0xFFFFFBEB))
 }

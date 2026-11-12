@@ -7,6 +7,7 @@ import com.rodvarled.admin.data.remote.api.AppointmentsApi
 import com.rodvarled.admin.data.remote.dto.AppointmentSummary
 import com.rodvarled.admin.data.remote.dto.CreateAppointmentRequest
 import com.rodvarled.admin.data.remote.dto.UpdateAppointmentRequest
+import com.rodvarled.admin.data.remote.dto.InstallationItemSelectionRequest
 import com.rodvarled.admin.data.remote.dto.UpdateAppointmentStatusRequest
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -42,10 +43,30 @@ class AppointmentsRepository @Inject constructor(
         Unit
     }
 
-    suspend fun updateStatus(id: Int, status: String, cancellationReason: String? = null) = safeApiCall {
-        val result = api.updateStatus(id, UpdateAppointmentStatusRequest(status, cancellationReason))
-        refresh()
-        result
+    suspend fun updateStatus(
+        id: Int,
+        status: String,
+        cancellationReason: String? = null,
+        items: List<InstallationItemSelectionRequest> = emptyList()
+    ): Result<AppointmentSummary> {
+        val result = safeApiCall {
+            api.updateStatus(id, UpdateAppointmentStatusRequest(status, cancellationReason, items))
+        }
+
+        if (result.isSuccess) {
+            refresh()
+            return result
+        }
+
+        // Si la respuesta se perdió después del commit, confirmar el estado real evita
+        // mostrar "error al actualizar" cuando la cita sí cambió en el servidor.
+        val current = getAppointment(id).getOrNull()
+        return if (current?.status == status) {
+            refresh()
+            Result.success(current)
+        } else {
+            result
+        }
     }
 
     suspend fun sendItinerary(id: Int) = safeApiCall { api.sendItinerary(id) }

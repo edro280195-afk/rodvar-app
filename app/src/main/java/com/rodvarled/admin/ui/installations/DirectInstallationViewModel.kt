@@ -12,8 +12,10 @@ import com.rodvarled.admin.data.remote.dto.VehicleMakeDto
 import com.rodvarled.admin.data.remote.dto.VehicleModelDto
 import com.rodvarled.admin.data.remote.dto.VehicleTrimDto
 import com.rodvarled.admin.data.remote.dto.VehicleYearDto
+import com.rodvarled.admin.data.remote.dto.InventoryUnit
 import com.rodvarled.admin.data.repository.CatalogRepository
 import com.rodvarled.admin.data.repository.CustomersRepository
+import com.rodvarled.admin.data.repository.InventoryRepository
 import com.rodvarled.admin.data.repository.InstallationsRepository
 import com.rodvarled.admin.data.repository.VehiclesRepository
 import com.rodvarled.admin.ui.appointments.SelectedProduct
@@ -56,7 +58,10 @@ data class DirectInstallationUiState(
 
     val completed: DirectInstallationResponse? = null
 ) {
-    val suggestedTotal: Double get() = selectedProducts.sumOf { it.product.price * it.quantity }
+    val suggestedTotal: Double get() = selectedProducts.sumOf { selected ->
+        val variantPrice = selected.bulbTypeId?.let { id -> selected.product.variants.firstOrNull { it.bulbTypeId == id }?.priceOverride }
+        (variantPrice ?: selected.product.promotionPrice ?: selected.product.price) * selected.quantity
+    }
 }
 
 @HiltViewModel
@@ -64,7 +69,8 @@ class DirectInstallationViewModel @Inject constructor(
     private val installationsRepository: InstallationsRepository,
     private val customersRepository: CustomersRepository,
     private val vehiclesRepository: VehiclesRepository,
-    private val catalogRepository: CatalogRepository
+    private val catalogRepository: CatalogRepository,
+    private val inventoryRepository: InventoryRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DirectInstallationUiState())
@@ -161,6 +167,41 @@ class DirectInstallationViewModel @Inject constructor(
         syncSuggestedTotal()
     }
 
+    fun onInventoryUnitScanned(code: String) {
+        viewModelScope.launch {
+            inventoryRepository.getUnit(code)
+                .onSuccess { unit -> addInventoryUnit(unit) }
+                .onFailure { error -> _uiState.value = _uiState.value.copy(error = error.toUserMessage()) }
+        }
+    }
+
+    private suspend fun addInventoryUnit(unit: InventoryUnit) {
+        if (unit.status != "Disponible") {
+            _uiState.value = _uiState.value.copy(error = "Esta unidad ya está marcada como ${unit.status.lowercase()}.")
+            return
+        }
+
+        val product = _uiState.value.availableProducts.firstOrNull { it.id == unit.productId }
+            ?: catalogRepository.getProduct(unit.productId).getOrNull()
+        if (product == null) {
+            _uiState.value = _uiState.value.copy(error = "El producto de esta etiqueta ya no está disponible.")
+            return
+        }
+
+        val current = _uiState.value.selectedProducts
+        val existing = current.firstOrNull { it.product.id == unit.productId && it.bulbTypeId == unit.productBulbTypeId }
+        val updated = if (existing != null) {
+            current.map {
+                if (it === existing) it.copy(quantity = it.quantity + 1, inventoryUnitCodes = it.inventoryUnitCodes + unit.code) else it
+            }
+        } else {
+            current + SelectedProduct(product, 1, unit.productBulbTypeId, listOf(unit.code))
+        }
+
+        _uiState.value = _uiState.value.copy(selectedProducts = updated, error = null)
+        syncSuggestedTotal()
+    }
+
     fun setProductQuantity(productId: Int, quantity: Int) {
         if (quantity < 1) return
         _uiState.value = _uiState.value.copy(
@@ -201,7 +242,9 @@ class DirectInstallationViewModel @Inject constructor(
                 technicianNotes = state.technicianNotes.ifBlank { null },
                 paymentMethod = state.paymentMethod,
                 totalAmount = total,
-                items = state.selectedProducts.map { CreateQuoteItemRequest(it.product.id, it.quantity) }
+                items = state.selectedProducts.map {
+                    CreateQuoteItemRequest(it.product.id, it.quantity, it.bulbTypeId, it.inventoryUnitCodes)
+                }
             )
 
             installationsRepository.createDirectInstallation(request)

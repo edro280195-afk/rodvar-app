@@ -34,28 +34,46 @@ class RodvarMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
 
-        val title = message.notification?.title ?: message.data["title"] ?: "Rodvar"
+        val title = message.notification?.title ?: message.data["title"] ?: "Rodvar Gestor"
         val body = message.notification?.body ?: message.data["body"] ?: ""
+        val route = message.data["route"] ?: message.data["routeUrl"]
 
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            if (!route.isNullOrBlank()) {
+                putExtra("route", route)
+            }
         }
+
         val pendingIntent = PendingIntent.getActivity(
-            this, 0, intent,
+            this,
+            Random.nextInt(),
+            intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val notification = NotificationCompat.Builder(this, RodvarApplication.CHANNEL_GENERAL)
+        val channelId = if (route?.contains("appointment") == true || title.contains("Cita", ignoreCase = true)) {
+            RodvarApplication.CHANNEL_APPOINTMENTS
+        } else {
+            RodvarApplication.CHANNEL_GENERAL
+        }
+
+        val notification = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
             .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .build()
 
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-            androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            androidx.core.content.ContextCompat.checkSelfPermission(
+                this,
+                android.Manifest.permission.POST_NOTIFICATIONS
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
         ) {
             NotificationManagerCompat.from(this).notify(Random.nextInt(), notification)
         }

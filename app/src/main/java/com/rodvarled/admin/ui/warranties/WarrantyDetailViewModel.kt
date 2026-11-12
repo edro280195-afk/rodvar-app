@@ -5,6 +5,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rodvarled.admin.core.util.toUserMessage
 import com.rodvarled.admin.data.remote.dto.WarrantyDetail
+import com.rodvarled.admin.data.remote.dto.CreateWarrantyClaimRequest
+import com.rodvarled.admin.data.remote.dto.BulbTypeVariant
+import com.rodvarled.admin.data.remote.dto.ProductDetail
+import com.rodvarled.admin.data.repository.CatalogRepository
 import com.rodvarled.admin.data.repository.WarrantiesRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,12 +24,14 @@ data class WarrantyDetailUiState(
     val error: String? = null,
     val actionInProgress: Boolean = false,
     val snackbarMessage: String? = null,
-    val deleted: Boolean = false
+    val deleted: Boolean = false,
+    val products: List<ProductDetail> = emptyList()
 )
 
 @HiltViewModel
 class WarrantyDetailViewModel @Inject constructor(
     private val repository: WarrantiesRepository,
+    private val catalogRepository: CatalogRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -34,7 +40,13 @@ class WarrantyDetailViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(WarrantyDetailUiState())
     val uiState = _uiState.asStateFlow()
 
-    init { load() }
+    init {
+        load()
+        viewModelScope.launch {
+            catalogRepository.getProducts()
+                .onSuccess { products -> _uiState.value = _uiState.value.copy(products = products) }
+        }
+    }
 
     fun load() {
         viewModelScope.launch {
@@ -78,6 +90,33 @@ class WarrantyDetailViewModel @Inject constructor(
             repository.delete(warrantyId)
                 .onSuccess { _uiState.value = _uiState.value.copy(actionInProgress = false, deleted = true) }
                 .onFailure { _uiState.value = _uiState.value.copy(actionInProgress = false, snackbarMessage = it.toUserMessage()) }
+        }
+    }
+
+    fun createClaim(
+        reason: String,
+        product: ProductDetail?,
+        variant: BulbTypeVariant?,
+        quantity: Int,
+        laborCost: Double
+    ) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(actionInProgress = true)
+            repository.createClaim(
+                warrantyId,
+                CreateWarrantyClaimRequest(
+                    reason = reason,
+                    productId = product?.id,
+                    productBulbTypeId = variant?.id,
+                    quantity = quantity,
+                    laborCost = laborCost
+                )
+            ).onSuccess {
+                load()
+                _uiState.value = _uiState.value.copy(actionInProgress = false, snackbarMessage = "Garantía aplicada y costo registrado.")
+            }.onFailure {
+                _uiState.value = _uiState.value.copy(actionInProgress = false, snackbarMessage = it.toUserMessage())
+            }
         }
     }
 

@@ -10,6 +10,7 @@ import javax.inject.Singleton
 class NotificationsRepository @Inject constructor(
     private val api: NotificationsApi
 ) {
-    suspend fun registerDevice(token: String) = safeApiCall { api.registerDevice(RegisterDeviceRequest(token)) }
-    suspend fun unregisterDevice(token: String) = safeApiCall { api.unregisterDevice(RegisterDeviceRequest(token)) }
+    suspend fun registerDevice(token: String): Result<Unit> = safeApiCall { api.registerDevice(RegisterDeviceRequest(token)) }
+    suspend fun unregisterDevice(token: String): Result<Unit> = safeApiCall { api.unregisterDevice(RegisterDeviceRequest(token)) }
+    suspend fun sendTestNotification(): Result<Unit> = safeApiCall { api.testFcmNotification() }
 }

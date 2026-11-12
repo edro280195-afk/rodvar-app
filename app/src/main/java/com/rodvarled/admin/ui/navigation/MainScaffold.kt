@@ -3,6 +3,7 @@ package com.rodvarled.admin.ui.navigation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -23,17 +24,21 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
-import com.rodvarled.admin.ui.theme.RodvarBlue
-import com.rodvarled.admin.ui.theme.RodvarEmerald
+import com.rodvarled.admin.ui.theme.RodvarOutline
+import com.rodvarled.admin.ui.theme.RodvarPrimary
+import com.rodvarled.admin.ui.theme.RodvarPrimaryContainer
+import com.rodvarled.admin.ui.theme.RodvarSurface
+import com.rodvarled.admin.ui.theme.RodvarTextSecondary
 
 private data class BottomTab(
     val screen: Screen,
@@ -56,10 +61,14 @@ fun MainScaffold(navController: NavHostController) {
     val currentRoute = backStackEntry?.destination?.route
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             Column {
-                Box(Modifier.fillMaxWidth().height(2.dp).background(Brush.horizontalGradient(listOf(RodvarBlue, RodvarEmerald))))
-                NavigationBar {
+                Box(Modifier.fillMaxWidth().height(1.dp).background(RodvarOutline))
+                NavigationBar(
+                    containerColor = RodvarSurface,
+                    tonalElevation = 8.dp
+                ) {
                     bottomTabs.forEach { tab ->
                         val selected = currentRoute == tab.screen.route
                         NavigationBarItem(
@@ -72,11 +81,18 @@ fun MainScaffold(navController: NavHostController) {
                                 }
                             },
                             icon = { Icon(if (selected) tab.filledIcon else tab.outlinedIcon, contentDescription = tab.label) },
-                            label = { androidx.compose.material3.Text(tab.label) },
+                            label = {
+                                Text(
+                                    tab.label,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            },
                             colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = MaterialTheme.colorScheme.primary,
-                                selectedTextColor = MaterialTheme.colorScheme.primary,
-                                indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                selectedIconColor = RodvarPrimary,
+                                selectedTextColor = RodvarPrimary,
+                                unselectedIconColor = RodvarTextSecondary,
+                                unselectedTextColor = RodvarTextSecondary,
+                                indicatorColor = RodvarPrimaryContainer
                             )
                         )
                     }

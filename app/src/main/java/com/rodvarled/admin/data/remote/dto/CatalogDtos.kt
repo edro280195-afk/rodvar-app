@@ -9,6 +9,7 @@ data class BulbTypeVariant(
     val bulbTypeName: String = "",
     val stock: Int,
     val priceOverride: Double? = null,
+    val costOverride: Double? = null,
     val lowStockThreshold: Int? = null
 )
 
@@ -21,6 +22,10 @@ data class ProductDetail(
     val slug: String,
     val description: String? = null,
     val price: Double,
+    val cost: Double = 0.0,
+    val promotionPrice: Double? = null,
+    val promotionLabel: String? = null,
+    val promotionEndsAt: String? = null,
     val warrantyMonths: Int,
     val lumens: Int? = null,
     val colorTemperature: Int? = null,
@@ -32,6 +37,7 @@ data class ProductDetail(
     val bulbTypeId: Int? = null,
     val stock: Int,
     val lowStockThreshold: Int? = null,
+    val isActive: Boolean = true,
     val variants: List<BulbTypeVariant> = emptyList()
 )
 
@@ -40,6 +46,7 @@ data class BulbTypeVariantSaveRequest(
     val bulbTypeId: Int,
     val stock: Int,
     val priceOverride: Double? = null,
+    val costOverride: Double? = null,
     val lowStockThreshold: Int? = null
 )
 
@@ -51,6 +58,7 @@ data class ProductSaveRequest(
     val slug: String,
     val description: String? = null,
     val price: Double,
+    val cost: Double = 0.0,
     val warrantyMonths: Int,
     val lumens: Int? = null,
     val colorTemperature: Int? = null,
@@ -85,7 +93,11 @@ data class StockAdjustRequest(
     val bulbTypeId: Int? = null,
     val delta: Int,
     val reason: String,
-    val note: String? = null
+    val note: String? = null,
+    val unitCostUsd: Double? = null,
+    val exchangeRate: Double? = null,
+    val purchaseDate: String? = null,
+    val receivedDate: String? = null
 )
 
 @Serializable
@@ -103,7 +115,12 @@ data class StockMovement(
     val note: String? = null,
     val bulbTypeName: String? = null,
     val createdByUserName: String? = null,
-    val createdAt: String? = null
+    val createdAt: String? = null,
+    val unitCostUsd: Double? = null,
+    val exchangeRate: Double? = null,
+    val unitCostMxn: Double? = null,
+    val purchaseDate: String? = null,
+    val receivedDate: String? = null
 )
 
 @Serializable
@@ -132,4 +149,67 @@ data class ProductImportResult(
     val creados: Int = 0,
     val actualizados: Int = 0,
     val errores: List<String> = emptyList()
+)
+
+@Serializable
+data class PriceRule(
+    val id: Int,
+    val productId: Int,
+    val productBulbTypeId: Int? = null,
+    val customerId: Int? = null,
+    val name: String,
+    val ruleType: String,
+    val discountType: String,
+    val value: Double,
+    val minimumQuantity: Int = 1,
+    val priority: Int = 0,
+    val startsAt: String? = null,
+    val endsAt: String? = null,
+    val isActive: Boolean = true,
+    val productName: String = "",
+    val variantName: String? = null,
+    val customerName: String? = null
+)
+
+@Serializable
+data class SavePriceRuleRequest(
+    val productId: Int,
+    val productBulbTypeId: Int? = null,
+    val customerId: Int? = null,
+    val name: String,
+    val ruleType: String = "Promotion",
+    val discountType: String = "FixedPrice",
+    val value: Double,
+    val minimumQuantity: Int = 1,
+    val priority: Int = 0,
+    val startsAt: String? = null,
+    val endsAt: String? = null,
+    val isActive: Boolean = true
+)
+
+@Serializable
+data class InventoryUnit(
+    val id: Int,
+    val productId: Int,
+    val productBulbTypeId: Int? = null,
+    val code: String,
+    val qrPayload: String,
+    val status: String,
+    val productName: String,
+    val variantName: String? = null,
+    val createdAt: String,
+    val consumedAt: String? = null,
+    val inventoryLotId: Int? = null,
+    val purchaseUnitCostUsd: Double? = null,
+    val purchaseExchangeRate: Double? = null,
+    val purchaseUnitCostMxn: Double? = null,
+    val purchaseDate: String? = null,
+    val receivedDate: String? = null
+)
+
+@Serializable
+data class CreateInventoryLabelsRequest(
+    val productId: Int,
+    val productBulbTypeId: Int? = null,
+    val quantity: Int
 )

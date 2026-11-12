@@ -45,6 +45,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -57,10 +58,12 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
+import com.rodvarled.admin.core.util.PhoneUtils
 import com.rodvarled.admin.data.remote.dto.DirectInstallationResponse
 import com.rodvarled.admin.ui.appointments.PAYMENT_METHODS
 import com.rodvarled.admin.ui.components.DropdownSelector
 import com.rodvarled.admin.ui.components.IconBadge
+import com.rodvarled.admin.ui.components.PhoneInputField
 import com.rodvarled.admin.ui.components.PhotoCaptureField
 import com.rodvarled.admin.ui.components.RodvarListRow
 import com.rodvarled.admin.ui.components.SectionHeader
@@ -76,6 +79,18 @@ fun DirectInstallationScreen(
     var showVehicleSheet by remember { mutableStateOf(false) }
     var showProductSheet by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val scannedCodeState = navController.currentBackStackEntry
+        ?.savedStateHandle
+        ?.getStateFlow<String?>("scannedInventoryUnit", null)
+        ?.collectAsState()
+    val scannedCode = scannedCodeState?.value
+
+    LaunchedEffect(scannedCode) {
+        if (!scannedCode.isNullOrBlank()) {
+            navController.currentBackStackEntry?.savedStateHandle?.set("scannedInventoryUnit", null)
+            viewModel.onInventoryUnitScanned(scannedCode)
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -119,9 +134,8 @@ fun DirectInstallationScreen(
                     }
                 },
                 onSharePortal = {
-                    val cleanPhone = uiState.customerPhone.filter { it.isDigit() }
                     val message = "¡Hola ${uiState.customerName.trim()}! Tu instalación ${completed.folio} quedó registrada. En tu portal de Rodvar LED puedes consultar y firmar tu garantía, ver tus puntos y tu historial: ${completed.portalUrl}"
-                    val url = "https://wa.me/52$cleanPhone?text=${Uri.encode(message)}"
+                    val url = PhoneUtils.buildWhatsAppUrl(uiState.customerPhone, message)
                     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
                 },
                 onDone = { navController.popBackStack() },
@@ -137,13 +151,10 @@ fun DirectInstallationScreen(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 SectionHeader("Cliente", modifier = Modifier.padding(top = 8.dp))
-                OutlinedTextField(
-                    value = uiState.customerPhone,
-                    onValueChange = viewModel::onCustomerPhoneChange,
-                    label = { Text("Teléfono") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                    singleLine = true,
-                    shape = MaterialTheme.shapes.medium,
+                PhoneInputField(
+                    phone = uiState.customerPhone,
+                    onPhoneChange = viewModel::onCustomerPhoneChange,
+                    label = "Teléfono",
                     modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
                 )
 
@@ -212,7 +223,10 @@ fun DirectInstallationScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    TextButton(onClick = { showProductSheet = true }) { Text("+ Agregar") }
+                    Row {
+                        TextButton(onClick = { navController.navigate(Screen.QrScanner.route) }) { Text("Escanear QR") }
+                        TextButton(onClick = { showProductSheet = true }) { Text("+ Agregar") }
+                    }
                 }
 
                 uiState.selectedProducts.forEach { selected ->
@@ -222,7 +236,12 @@ fun DirectInstallationScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(selected.product.name, style = MaterialTheme.typography.bodyMedium)
-                            Text("$${"%.2f".format(selected.product.price)} c/u", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            val variant = selected.bulbTypeId?.let { id -> selected.product.variants.firstOrNull { it.bulbTypeId == id } }
+                            val unitPrice = variant?.priceOverride ?: selected.product.promotionPrice ?: selected.product.price
+                            Text("$${"%.2f".format(unitPrice)} c/u${variant?.bulbTypeName?.let { " · $it" } ?: ""}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (selected.inventoryUnitCodes.isNotEmpty()) {
+                                Text("QR: ${selected.inventoryUnitCodes.joinToString()}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                            }
                         }
                         IconButton(onClick = { viewModel.setProductQuantity(selected.product.id, selected.quantity - 1) }, enabled = selected.quantity > 1) {
                             Icon(Icons.Filled.Remove, contentDescription = "Restar")

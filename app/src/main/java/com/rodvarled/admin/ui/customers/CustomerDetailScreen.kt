@@ -45,6 +45,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
+import com.rodvarled.admin.core.util.PhoneUtils
 import com.rodvarled.admin.ui.appointments.formatAppointmentDate
 import com.rodvarled.admin.ui.components.ErrorState
 import com.rodvarled.admin.ui.components.FullScreenLoading
@@ -109,7 +110,7 @@ fun CustomerDetailScreen(
                         Row(modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)) {
                             OutlinedButton(onClick = {
                                 val message = "Hola ${customer.name}! Aquí está tu enlace para ver tus citas, garantías y puntos: ${uiState.portalUrl}"
-                                val url = "https://wa.me/52${customer.phone.filter { it.isDigit() }}?text=${Uri.encode(message)}"
+                                val url = PhoneUtils.buildWhatsAppUrl(customer.phone, message)
                                 runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
                             }) {
                                 Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.padding(end = 6.dp))

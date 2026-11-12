@@ -39,6 +39,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import com.rodvarled.admin.ui.components.EmptyState
 import com.rodvarled.admin.ui.components.InitialsAvatar
+import com.rodvarled.admin.ui.components.PhoneInputField
 import com.rodvarled.admin.ui.components.RodvarListRow
 import com.rodvarled.admin.ui.components.SearchField
 import com.rodvarled.admin.ui.navigation.Screen
@@ -121,7 +122,7 @@ fun CustomersListScreen(navController: NavHostController, viewModel: CustomersLi
             text = {
                 Column {
                     OutlinedTextField(value = newName, onValueChange = { newName = it }, label = { Text("Nombre") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(value = newPhone, onValueChange = { newPhone = it }, label = { Text("Teléfono") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+                    PhoneInputField(phone = newPhone, onPhoneChange = { newPhone = it }, label = "Teléfono", modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
                 }
             },
             confirmButton = {

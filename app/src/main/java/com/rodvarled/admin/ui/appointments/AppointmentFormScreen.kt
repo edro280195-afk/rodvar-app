@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Schedule
@@ -56,6 +57,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import com.rodvarled.admin.ui.components.DropdownSelector
 import com.rodvarled.admin.ui.components.IconBadge
+import com.rodvarled.admin.ui.components.PhoneInputField
 import com.rodvarled.admin.ui.components.RodvarDatePickerDialog
 import com.rodvarled.admin.ui.components.RodvarListRow
 import com.rodvarled.admin.ui.components.RodvarTimePickerDialog
@@ -118,13 +120,10 @@ fun AppointmentFormScreen(
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             SectionHeader("Cliente", modifier = Modifier.padding(top = 8.dp))
-            OutlinedTextField(
-                value = uiState.customerPhone,
-                onValueChange = viewModel::onCustomerPhoneChange,
-                label = { Text("Teléfono") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                singleLine = true,
-                shape = MaterialTheme.shapes.medium,
+            PhoneInputField(
+                phone = uiState.customerPhone,
+                onPhoneChange = viewModel::onCustomerPhoneChange,
+                label = "Teléfono",
                 modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
             )
 
@@ -175,6 +174,54 @@ fun AppointmentFormScreen(
                     value = uiState.requestedTime.ifBlank { null }?.let { formatAppointmentTime(it) } ?: "Elegir hora",
                     onClick = { showTimePicker = true },
                     modifier = Modifier.weight(1f)
+                )
+            }
+
+            SectionHeader("Ubicación del servicio")
+            OutlinedTextField(
+                value = uiState.serviceAddress,
+                onValueChange = viewModel::onServiceAddressChange,
+                label = { Text("Dirección del domicilio") },
+                placeholder = { Text("Busca calle, número, colonia o negocio") },
+                singleLine = true,
+                trailingIcon = {
+                    if (uiState.isAddressSearching) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    } else if (uiState.serviceLatitude != null && uiState.serviceLongitude != null) {
+                        Icon(Icons.Filled.LocationOn, contentDescription = "Ubicación guardada", tint = MaterialTheme.colorScheme.primary)
+                    }
+                },
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+            )
+
+            if (uiState.addressSuggestions.isNotEmpty()) {
+                Column(modifier = Modifier.padding(top = 4.dp)) {
+                    uiState.addressSuggestions.forEach { suggestion ->
+                        RodvarListRow(
+                            onClick = { viewModel.selectAddress(suggestion) },
+                            leading = { IconBadge(Icons.Filled.LocationOn, modifier = Modifier.size(36.dp)) },
+                            headline = { Text(suggestion.primaryText, style = MaterialTheme.typography.bodyMedium) },
+                            supporting = { Text(suggestion.secondaryText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                            showChevron = false
+                        )
+                    }
+                }
+            }
+
+            if (uiState.serviceLatitude != null && uiState.serviceLongitude != null) {
+                Text(
+                    "Ubicación precisa guardada · ${"%.6f".format(uiState.serviceLatitude)}, ${"%.6f".format(uiState.serviceLongitude)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
+            } else if (uiState.addressError != null) {
+                Text(
+                    uiState.addressError!!,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 6.dp)
                 )
             }
 

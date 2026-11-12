@@ -38,12 +38,18 @@ class ProductDetailViewModel @Inject constructor(
 
     init { load() }
 
-    fun load() {
+    fun load(showLoading: Boolean = true) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            if (showLoading) {
+                _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            }
             repository.getProduct(productId)
                 .onSuccess { _uiState.value = _uiState.value.copy(isLoading = false, product = it) }
-                .onFailure { _uiState.value = _uiState.value.copy(isLoading = false, error = it.toUserMessage()) }
+                .onFailure {
+                    if (showLoading) {
+                        _uiState.value = _uiState.value.copy(isLoading = false, error = it.toUserMessage())
+                    }
+                }
             loadMovements()
         }
     }
@@ -54,27 +60,63 @@ class ProductDetailViewModel @Inject constructor(
         }
     }
 
-    /** Ajuste rápido de +/-1 con un toque, para el conteo del día a día. */
+    /** Ajuste rápido de +/-1 optimista en pantalla sin recargar la UI. */
     fun quickAdjust(bulbTypeId: Int?, delta: Int) {
+        val currentProduct = _uiState.value.product ?: return
+        val updatedVariants = currentProduct.variants.map { v ->
+            if (bulbTypeId != null && v.bulbTypeId == bulbTypeId) v.copy(stock = (v.stock + delta).coerceAtLeast(0))
+            else v
+        }
+        val updatedStock = if (currentProduct.variants.isEmpty()) (currentProduct.stock + delta).coerceAtLeast(0) else currentProduct.stock
+        val updatedProduct = currentProduct.copy(stock = updatedStock, variants = updatedVariants)
+
+        _uiState.value = _uiState.value.copy(product = updatedProduct, actionInProgress = true)
+
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(actionInProgress = true)
             repository.adjustStock(productId, bulbTypeId, delta, "Ajuste")
-                .onSuccess { load(); _uiState.value = _uiState.value.copy(actionInProgress = false) }
-                .onFailure { _uiState.value = _uiState.value.copy(actionInProgress = false, snackbarMessage = it.toUserMessage()) }
+                .onSuccess {
+                    load(showLoading = false)
+                    _uiState.value = _uiState.value.copy(actionInProgress = false)
+                }
+                .onFailure { err ->
+                    load(showLoading = false)
+                    _uiState.value = _uiState.value.copy(actionInProgress = false, snackbarMessage = err.toUserMessage())
+                }
         }
     }
 
     /** Ajuste deliberado (recepción de mercancía, merma, conteo) con motivo y nota. */
-    fun adjustWithReason(bulbTypeId: Int?, delta: Int, reason: String, note: String?) {
+    fun adjustWithReason(
+        bulbTypeId: Int?,
+        delta: Int,
+        reason: String,
+        note: String?,
+        unitCostUsd: Double? = null,
+        exchangeRate: Double? = null,
+        purchaseDate: String? = null,
+        receivedDate: String? = null
+    ) {
         if (delta == 0) return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(actionInProgress = true)
-            repository.adjustStock(productId, bulbTypeId, delta, reason, note)
+            repository.adjustStock(
+                productId = productId,
+                bulbTypeId = bulbTypeId,
+                delta = delta,
+                reason = reason,
+                note = note,
+                unitCostUsd = unitCostUsd,
+                exchangeRate = exchangeRate,
+                purchaseDate = purchaseDate,
+                receivedDate = receivedDate
+            )
                 .onSuccess {
-                    load()
+                    load(showLoading = false)
                     _uiState.value = _uiState.value.copy(actionInProgress = false, snackbarMessage = "Stock actualizado.")
                 }
-                .onFailure { _uiState.value = _uiState.value.copy(actionInProgress = false, snackbarMessage = it.toUserMessage()) }
+                .onFailure { err ->
+                    _uiState.value = _uiState.value.copy(actionInProgress = false, snackbarMessage = err.toUserMessage())
+                }
         }
     }
 
@@ -83,7 +125,9 @@ class ProductDetailViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(actionInProgress = true)
             repository.deactivateProduct(productId)
                 .onSuccess { _uiState.value = _uiState.value.copy(actionInProgress = false, deactivated = true) }
-                .onFailure { _uiState.value = _uiState.value.copy(actionInProgress = false, snackbarMessage = it.toUserMessage()) }
+                .onFailure { err ->
+                    _uiState.value = _uiState.value.copy(actionInProgress = false, snackbarMessage = err.toUserMessage())
+                }
         }
     }
 

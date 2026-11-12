@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "000000000000",
-    "project_id": "rodvarled-placeholder",
-    "storage_bucket": "rodvarled-placeholder.appspot.com"
+    "project_number": "351170240348",
+    "project_id": "rodvar-4c3bd",
+    "storage_bucket": "rodvar-4c3bd.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:000000000000:android:0000000000000000000000",
+        "mobilesdk_app_id": "1:351170240348:android:7da94b13505e0329d92b99",
         "android_client_info": {
           "package_name": "com.rodvarled.admin"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyDPLACEHOLDERPLACEHOLDERPLACEHOLDER0"
+          "current_key": "AIzaSyCwDIH5oj4GPSjZ29mOIGsSlHAJL0Db3qQ"
         }
       ],
       "services": {

@@ -18,18 +18,29 @@ class RodvarApplication : Application() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
 
         val manager = getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(
-            NotificationChannel(
-                CHANNEL_GENERAL,
-                "Rodvar · Notificaciones",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "Citas nuevas, cambios de estado y alertas de inventario"
-            }
-        )
+
+        val generalChannel = NotificationChannel(
+            CHANNEL_GENERAL,
+            "Rodvar · General",
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = "Novedades y alertas del sistema"
+        }
+
+        val appointmentsChannel = NotificationChannel(
+            CHANNEL_APPOINTMENTS,
+            "Rodvar · Recordatorio de Citas",
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = "Notificaciones y recordatorios de citas próximas"
+            enableVibration(true)
+        }
+
+        manager.createNotificationChannels(listOf(generalChannel, appointmentsChannel))
     }
 
     companion object {
         const val CHANNEL_GENERAL = "rodvar_general"
+        const val CHANNEL_APPOINTMENTS = "rodvar_appointments"
     }
 }

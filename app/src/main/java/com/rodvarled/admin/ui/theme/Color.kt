@@ -2,21 +2,39 @@ package com.rodvarled.admin.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Paleta de marca Rodvar LED (misma identidad del sitio: fondo oscuro, azul primario, acento esmeralda)
-val RodvarBlue = Color(0xFF3B82F6)
-val RodvarBlueDark = Color(0xFF1D4ED8)
-val RodvarBlueContainer = Color(0xFF12306B)
-val RodvarEmerald = Color(0xFF10B981)
-val RodvarEmeraldContainer = Color(0xFF0B3B2C)
-val RodvarRed = Color(0xFFEF4444)
-val RodvarAmber = Color(0xFFF59E0B)
+// Paleta de Marca Rodvar LED - Modo Claro Moderno (Estilo Dribbble & Pinterest)
+val RodvarPrimary = Color(0xFF2563EB)         // Azul Real vibrante profesional
+val RodvarPrimaryDark = Color(0xFF1E40AF)     // Azul Marino Profundo
+val RodvarPrimaryContainer = Color(0xFFEFF6FF)// Fondo píldora azul claro
+val RodvarOnPrimaryContainer = Color(0xFF1E40AF)
 
-val RodvarBackground = Color(0xFF030712)
-val RodvarSurface = Color(0xFF111827)
-val RodvarSurfaceVariant = Color(0xFF1F2937)
-val RodvarOutline = Color(0xFF374151)
-val RodvarOnSurfaceMuted = Color(0xFF9CA3AF)
+val RodvarSecondary = Color(0xFF059669)       // Verde Esmeralda (Confirmada / Éxito)
+val RodvarSecondaryContainer = Color(0xFFECFDF5)
+val RodvarOnSecondaryContainer = Color(0xFF065F46)
 
-val RodvarBackgroundLight = Color(0xFFF8FAFC)
-val RodvarSurfaceLight = Color(0xFFFFFFFF)
-val RodvarSurfaceVariantLight = Color(0xFFE5E7EB)
+val RodvarAmber = Color(0xFFD97706)           // Ámbar Cálido (Pendiente / Borrador)
+val RodvarAmberContainer = Color(0xFFFFFBEB)
+
+val RodvarRed = Color(0xFFDC2626)             // Rojo Carmesí (Cancelada / Alerta)
+val RodvarRedContainer = Color(0xFFFEF2F2)
+
+val RodvarBackground = Color(0xFFF8FAFC)      // Fondo suave Off-White / Light Slate
+val RodvarSurface = Color(0xFFFFFFFF)         // Tarjetas en blanco puro
+val RodvarSurfaceVariant = Color(0xFFF1F5F9)  // Contenedores secundarios
+val RodvarOutline = Color(0xFFE2E8F0)         // Bordes finos y limpios
+val RodvarOutlineVariant = Color(0xFFCBD5E1)
+
+val RodvarTextPrimary = Color(0xFF0F172A)     // Slate muy oscuro (títulos)
+val RodvarTextSecondary = Color(0xFF64748B)   // Slate medio (subtítulos y cuerpo)
+val RodvarTextMuted = Color(0xFF94A3B8)       // Slate claro (fechas / etiquetas secundarias)
+
+// Compatibilidad con referencias previas
+val RodvarBlue = RodvarPrimary
+val RodvarBlueDark = RodvarPrimaryDark
+val RodvarBlueContainer = RodvarPrimaryContainer
+val RodvarEmerald = RodvarSecondary
+val RodvarEmeraldContainer = RodvarSecondaryContainer
+val RodvarBackgroundLight = RodvarBackground
+val RodvarSurfaceLight = RodvarSurface
+val RodvarSurfaceVariantLight = RodvarSurfaceVariant
+val RodvarOnSurfaceMuted = RodvarTextSecondary

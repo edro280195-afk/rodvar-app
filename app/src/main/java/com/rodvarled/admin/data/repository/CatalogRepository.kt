@@ -37,6 +37,8 @@ class CatalogRepository @Inject constructor(
 
     suspend fun getProduct(id: Int) = safeApiCall { api.getProduct(id) }
 
+    suspend fun getProducts() = safeApiCall { api.getProducts(null) }
+
     suspend fun createProduct(request: ProductSaveRequest) = safeApiCall {
         val result = api.createProduct(request)
         refresh()
@@ -57,8 +59,18 @@ class CatalogRepository @Inject constructor(
 
     suspend fun getLowStockAlerts() = safeApiCall { api.getLowStock() }
 
-    suspend fun adjustStock(productId: Int, bulbTypeId: Int?, delta: Int, reason: String, note: String? = null) = safeApiCall {
-        val result = api.adjustStock(productId, StockAdjustRequest(bulbTypeId, delta, reason, note))
+    suspend fun adjustStock(
+        productId: Int,
+        bulbTypeId: Int?,
+        delta: Int,
+        reason: String,
+        note: String? = null,
+        unitCostUsd: Double? = null,
+        exchangeRate: Double? = null,
+        purchaseDate: String? = null,
+        receivedDate: String? = null
+    ) = safeApiCall {
+        val result = api.adjustStock(productId, StockAdjustRequest(bulbTypeId, delta, reason, note, unitCostUsd, exchangeRate, purchaseDate, receivedDate))
         refresh()
         result
     }

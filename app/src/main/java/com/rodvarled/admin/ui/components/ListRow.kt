@@ -1,6 +1,7 @@
 package com.rodvarled.admin.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Icon
@@ -24,8 +26,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
 /**
- * Fila de lista sin Card ni elevación (generaliza AppointmentCard): visual líder a la izquierda,
- * contenido central, trailing opcional a la derecha, separada por divisores entre filas.
+ * Fila de lista de diseño moderno: tarjeta blanca pura con borde sutil (#E2E8F0) y elevación visual limpia.
  */
 @Composable
 fun RodvarListRow(
@@ -40,9 +41,11 @@ fun RodvarListRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(MaterialTheme.shapes.medium)
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
-            .padding(vertical = 10.dp, horizontal = 4.dp),
+            .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         leading()
@@ -65,7 +68,7 @@ fun RodvarListRow(
     }
 }
 
-/** Visual líder circular con ícono, mismo lenguaje de tinte al 12% que DateChip. */
+/** Visual líder circular con ícono. */
 @Composable
 fun IconBadge(icon: ImageVector, modifier: Modifier = Modifier, accent: Color = MaterialTheme.colorScheme.primary) {
     Box(
@@ -78,7 +81,7 @@ fun IconBadge(icon: ImageVector, modifier: Modifier = Modifier, accent: Color = 
     }
 }
 
-/** Visual líder circular con iniciales, para registros centrados en una persona. */
+/** Visual líder circular con iniciales. */
 @Composable
 fun InitialsAvatar(name: String, modifier: Modifier = Modifier, accent: Color = MaterialTheme.colorScheme.primary) {
     val initials = name.trim().split(" ").filter { it.isNotBlank() }.take(2).mapNotNull { it.firstOrNull()?.uppercase() }.joinToString("")

@@ -5,8 +5,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rodvarled.admin.core.util.toUserMessage
 import com.rodvarled.admin.data.remote.dto.UpdateInstallationRequest
+import com.rodvarled.admin.data.remote.dto.InstallationItemSelectionRequest
+import com.rodvarled.admin.data.remote.dto.InventoryUnit
 import com.rodvarled.admin.data.repository.AppointmentsRepository
 import com.rodvarled.admin.data.repository.InstallationsRepository
+import com.rodvarled.admin.data.repository.InventoryRepository
 import com.rodvarled.admin.data.repository.WarrantiesRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +24,7 @@ data class CompleteInstallationUiState(
     val vehicleColor: String = "",
     val paymentMethod: String = "Efectivo",
     val technicianNotes: String = "",
+    val scannedUnits: List<InventoryUnit> = emptyList(),
     val acceptedTerms: Boolean = false,
     val beforePhotoBase64: String? = null,
     val afterPhotoBase64: String? = null,
@@ -34,6 +38,7 @@ class CompleteInstallationViewModel @Inject constructor(
     private val appointmentsRepository: AppointmentsRepository,
     private val warrantiesRepository: WarrantiesRepository,
     private val installationsRepository: InstallationsRepository,
+    private val inventoryRepository: InventoryRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -50,6 +55,21 @@ class CompleteInstallationViewModel @Inject constructor(
     fun onBeforePhotoCaptured(base64: String?) { _uiState.value = _uiState.value.copy(beforePhotoBase64 = base64) }
     fun onAfterPhotoCaptured(base64: String?) { _uiState.value = _uiState.value.copy(afterPhotoBase64 = base64) }
 
+    fun onInventoryUnitScanned(code: String) {
+        viewModelScope.launch {
+            if (_uiState.value.scannedUnits.any { it.code == code }) return@launch
+            inventoryRepository.getUnit(code)
+                .onSuccess { unit ->
+                    if (unit.status != "Disponible") {
+                        _uiState.value = _uiState.value.copy(error = "La etiqueta ${unit.code} ya está marcada como ${unit.status.lowercase()}.")
+                    } else {
+                        _uiState.value = _uiState.value.copy(scannedUnits = _uiState.value.scannedUnits + unit, error = null)
+                    }
+                }
+                .onFailure { _uiState.value = _uiState.value.copy(error = it.toUserMessage()) }
+        }
+    }
+
     fun submit(signatureBase64: String?) {
         val state = _uiState.value
 
@@ -61,11 +81,20 @@ class CompleteInstallationViewModel @Inject constructor(
             _uiState.value = state.copy(error = "El cliente debe aceptar los términos de garantía.")
             return
         }
+        if (state.beforePhotoBase64 != null && state.afterPhotoBase64 == null) {
+            _uiState.value = state.copy(error = "Si agregas la foto Antes, también agrega la foto Después.")
+            return
+        }
 
         _uiState.value = state.copy(isSubmitting = true, error = null)
 
         viewModelScope.launch {
-            val statusResult = appointmentsRepository.updateStatus(appointmentId, "Instalada")
+            val statusItems = state.scannedUnits
+                .groupBy { it.productId to it.productBulbTypeId }
+                .map { (key, units) ->
+                    InstallationItemSelectionRequest(key.first, key.second, units.map { it.code })
+                }
+            val statusResult = appointmentsRepository.updateStatus(appointmentId, "Instalada", items = statusItems)
             val updatedAppointment = statusResult.getOrNull()
             if (updatedAppointment == null) {
                 _uiState.value = _uiState.value.copy(isSubmitting = false, error = statusResult.exceptionOrNull()?.toUserMessage() ?: "No se pudo marcar la cita como instalada.")
@@ -85,11 +114,19 @@ class CompleteInstallationViewModel @Inject constructor(
                     return@launch
                 }
 
-            val warrantyDetail = warrantiesRepository.getWarranty(warrantyId).getOrNull()
+            val warrantyDetailResult = warrantiesRepository.getWarranty(warrantyId)
+            val warrantyDetail = warrantyDetailResult.getOrNull()
+            if (warrantyDetail == null) {
+                _uiState.value = _uiState.value.copy(
+                    isSubmitting = false,
+                    error = "La firma se guardó, pero no se pudo cargar la instalación. Revisa tu conexión e inténtalo nuevamente."
+                )
+                return@launch
+            }
             val installationId = warrantyDetail?.installationId
 
             if (installationId != null) {
-                installationsRepository.updateInstallation(
+                val updateResult = installationsRepository.updateInstallation(
                     installationId,
                     UpdateInstallationRequest(
                         vehiclePlate = state.vehiclePlate.ifBlank { null },
@@ -98,9 +135,23 @@ class CompleteInstallationViewModel @Inject constructor(
                         paymentMethod = state.paymentMethod
                     )
                 )
+                if (updateResult.isFailure) {
+                    _uiState.value = _uiState.value.copy(
+                        isSubmitting = false,
+                        error = "La cita y la firma se guardaron, pero no se pudieron guardar los datos de instalación: ${updateResult.exceptionOrNull()?.toUserMessage()}"
+                    )
+                    return@launch
+                }
 
                 if (state.afterPhotoBase64 != null) {
-                    installationsRepository.addPhoto(installationId, null, state.beforePhotoBase64, state.afterPhotoBase64)
+                    val photoResult = installationsRepository.addPhoto(installationId, null, state.beforePhotoBase64, state.afterPhotoBase64)
+                    if (photoResult.isFailure) {
+                        _uiState.value = _uiState.value.copy(
+                            isSubmitting = false,
+                            error = "La cita y la firma se guardaron, pero las fotos no se pudieron subir: ${photoResult.exceptionOrNull()?.toUserMessage()}"
+                        )
+                        return@launch
+                    }
                 }
             }
 

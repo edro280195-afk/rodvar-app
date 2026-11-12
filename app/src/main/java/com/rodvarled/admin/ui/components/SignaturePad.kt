@@ -58,17 +58,28 @@ class SignaturePadState {
         currentStroke.clear()
     }
 
-    /** Redibuja los trazos capturados sobre un bitmap real y lo exporta como PNG base64 (fondo blanco). */
+    /** Redibuja los trazos capturados sobre un bitmap real y lo exporta como PNG base64 (fondo blanco).
+     *  El bitmap de salida tiene siempre al menos MIN_EXPORT_W x MIN_EXPORT_H píxeles para que el
+     *  tamaño del archivo nunca caiga por debajo del umbral de validación de la API, sin importar
+     *  la densidad de pantalla del dispositivo. */
     fun exportPngBase64(): String? {
         if (!hasSignature || canvasSize.width <= 0 || canvasSize.height <= 0) return null
 
-        val bitmap = Bitmap.createBitmap(canvasSize.width, canvasSize.height, Bitmap.Config.ARGB_8888)
+        // Garantizar resolución mínima de exportación
+        val minW = 800
+        val minH = 300
+        val exportW = maxOf(canvasSize.width, minW)
+        val exportH = maxOf(canvasSize.height, minH)
+        val scaleX = exportW.toFloat() / canvasSize.width
+        val scaleY = exportH.toFloat() / canvasSize.height
+
+        val bitmap = Bitmap.createBitmap(exportW, exportH, Bitmap.Config.ARGB_8888)
         val canvas = AndroidCanvas(bitmap)
         canvas.drawColor(AndroidColor.WHITE)
 
         val paint = Paint().apply {
             color = AndroidColor.BLACK
-            strokeWidth = 6f
+            strokeWidth = 6f * maxOf(scaleX, scaleY)
             style = Paint.Style.STROKE
             strokeCap = Paint.Cap.ROUND
             strokeJoin = Paint.Join.ROUND
@@ -78,7 +89,11 @@ class SignaturePadState {
         val allStrokes = strokes + listOf(currentStroke.toList())
         allStrokes.forEach { stroke ->
             for (i in 0 until stroke.size - 1) {
-                canvas.drawLine(stroke[i].x, stroke[i].y, stroke[i + 1].x, stroke[i + 1].y, paint)
+                canvas.drawLine(
+                    stroke[i].x * scaleX, stroke[i].y * scaleY,
+                    stroke[i + 1].x * scaleX, stroke[i + 1].y * scaleY,
+                    paint
+                )
             }
         }
 

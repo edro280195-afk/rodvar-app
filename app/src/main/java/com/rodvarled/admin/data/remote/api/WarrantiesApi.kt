@@ -2,7 +2,9 @@ package com.rodvarled.admin.data.remote.api
 
 import com.rodvarled.admin.data.remote.dto.MessageResponse
 import com.rodvarled.admin.data.remote.dto.SignWarrantyRequest
+import com.rodvarled.admin.data.remote.dto.CreateWarrantyClaimRequest
 import com.rodvarled.admin.data.remote.dto.UpdateWarrantyRequest
+import com.rodvarled.admin.data.remote.dto.WarrantyClaim
 import com.rodvarled.admin.data.remote.dto.WarrantyDetail
 import com.rodvarled.admin.data.remote.dto.WarrantySummary
 import retrofit2.http.Body
@@ -18,6 +20,9 @@ interface WarrantiesApi {
 
     @GET("api/Warranties/{id}")
     suspend fun getWarranty(@Path("id") id: Int): WarrantyDetail
+
+    @retrofit2.http.POST("api/Warranties/{id}/claims")
+    suspend fun createClaim(@Path("id") id: Int, @Body request: CreateWarrantyClaimRequest): WarrantyClaim
 
     // Firma capturada en el momento por el instalador dentro del asistente "Completar instalación".
     @PATCH("api/Warranties/{id}/sign")
